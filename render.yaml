@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ibu-dashboard
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python IBU_scraper.py"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: GOOGLE_SERVICE_ACCOUNT_KEY
+        sync: false  # Set manually in Render dashboard

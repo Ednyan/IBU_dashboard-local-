@@ -1,0 +1,66 @@
+# 🔒 Sensitive credentials - NEVER commit these!
+service_account.json
+*.json
+!requirements.json
+!package.json
+
+# 🔑 Environment and credential files
+.env
+.env.local
+.env.production
+env_var_temp.txt
+RENDER_CREDENTIALS.txt
+
+# 🐍 Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 🌐 Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# 💻 IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 🖥️ OS files
+.DS_Store
+Thumbs.db
+
+# 📝 Logs
+*.log
+
+# 🧪 Test and debug files
+test_*.py
+debug_*.py
+*_test.py
+*_debug.py
+
+# 📁 Data folders (optional - comment out if you want to track)
+Scraped_Team_Info/
+
+# 📦 Distribution files
+*.tar.gz
+*.zip

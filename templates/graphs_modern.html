@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I.B.U TEAM DATA</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='graphs_modern.css') }}">
+</head>
+<body>
+  <!-- Particles background -->
+  <div class="particles-container" id="particles"></div>
+  
+  <!-- Background gradient overlay -->
+  <div class="background-overlay"></div>
+
+  <!-- Main container -->
+  <div class="main-container">
+    <!-- Header section -->
+    <header class="header-section">
+      <div class="header-content">
+        <div class="title-section">
+          <h1 class="main-title animate-slide-up">TEAM DATA VISUALIZATION</h1>
+          <p class="subtitle animate-slide-up" style="animation-delay: 0.2s;">
+            New CSV received {{ time_ago }} ({{ latest_date }})
+          </p>
+        </div>
+        <button class="nav-button animate-slide-up" style="animation-delay: 0.4s;" onclick="window.location.href='{{ url_for('index') }}'">
+          <span>← Main Page</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Control panel -->
+    <div class="control-section animate-slide-up" style="animation-delay: 0.6s;">
+      <div class="control-panel">
+        <div class="selector-group">
+          <label for="chartSelector" class="control-label">Choose chart:</label>
+          <select id="chartSelector" class="modern-select">
+            <option value="total">Total</option>
+            <option value="last_week">Last Week</option>
+            <option value="last_month">Last Month</option>
+            <option value="last_year">Last Year</option>
+            <option value="custom">Custom Date</option>
+          </select>
+        </div>
+        
+        <div class="date-controls" id="dateControls">
+          <input type="date" id="startDate" class="date-input" placeholder="Start Date" />
+          <input type="date" id="endDate" class="date-input" placeholder="End Date" />
+          <button id="applyCustomRange" class="apply-button">Apply Range</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <div class="content-section">
+      <!-- Sidebar navigation -->
+      <aside class="sidebar animate-slide-left" style="animation-delay: 0.8s;">
+        <nav class="nav-menu">
+          <button class="nav-item active" onclick="window.location.href='{{ url_for('visualization') }}'">
+            <div class="nav-icon">📊</div>
+            <span>Points Data</span>
+          </button>
+          <button class="nav-item" disabled>
+            <div class="nav-icon">📈</div>
+            <span>Trends</span>
+            <small class="coming-soon">Soon</small>
+          </button>
+          <button class="nav-item" disabled>
+            <div class="nav-icon">👥</div>
+            <span>Member Info</span>
+            <small class="coming-soon">Soon</small>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- Chart area -->
+      <main class="chart-section animate-slide-right" style="animation-delay: 1s;">
+        <div class="chart-container">
+          <div class="chart-header">
+            <h2 class="chart-title">Team Performance Analysis</h2>
+            <div class="chart-info">
+              <span class="info-badge">Interactive Chart</span>
+            </div>
+          </div>
+          
+          <div class="chart-wrapper">
+            <div id="pointsPieChart" class="chart-area"></div>
+            
+            <!-- Loading overlay -->
+            <div id="loadingOverlay" class="loading-overlay">
+              <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading chart data...</div>
+                <div class="loading-subtext">Please wait while we fetch your data</div>
+              </div>
+            </div>
+            
+            <!-- Chart instructions -->
+            <div class="chart-instructions">
+              <p>💡 <strong>Tip:</strong> Click legend items to hide/show data segments</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    // Particle system (same as index page)
+    function createParticles() {
+      const container = document.getElementById('particles');
+      const particleCount = 20; // Slightly more particles for data visualization theme
+
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        
+        // Random size between 2-8px
+        const size = Math.random() * 6 + 2;
+        particle.style.width = size + 'px';
+        particle.style.height = size + 'px';
+        
+        // Random position
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.top = Math.random() * 100 + '%';
+        
+        // Random animation delay and duration
+        particle.style.animationDelay = Math.random() * 8 + 's';
+        particle.style.animationDuration = (Math.random() * 4 + 6) + 's';
+        
+        container.appendChild(particle);
+      }
+    }
+
+    // Global variables - initialize safely (PRESERVE ORIGINAL FUNCTIONALITY)
+    let labels = [];
+    let dataValues = [];
+    let hiddenIndices = new Set();
+    let total = 0;
+    let currentValues = [];
+    let visibilityState = [];
+    
+    const chartSelector = document.getElementById("chartSelector");
+    const startDateInput = document.getElementById("startDate");
+    const endDateInput = document.getElementById("endDate");
+    const applyBtn = document.getElementById("applyCustomRange");
+
+    // PRESERVE ALL ORIGINAL CHART FUNCTIONALITY
+    chartSelector.addEventListener("change", () => {
+      const isCustom = chartSelector.value === "custom";
+      const dateControls = document.getElementById("dateControls");
+      
+      // Modern animation for date controls
+      if (isCustom) {
+        dateControls.classList.add('active');
+      } else {
+        dateControls.classList.remove('active');
+      }
+      
+      Plotly.purge('pointsPieChart');
+      if (!isCustom) {
+        setTimeout(() => {
+          loadPieChart(chartSelector.value);
+        }, 100);
+      }
+    });
+
+    applyBtn.addEventListener("click", () => {
+      const from = startDateInput.value;
+      const to = endDateInput.value;
+      console.log("start: ", startDateInput.value, "end: ", endDateInput.value);
+      if (!from || !to) {
+        // Modern alert styling
+        showNotification("Please select both start and end dates.", "warning");
+        return;
+      }
+      loadPieChart("custom", from, to);
+    });
+
+    // PRESERVE ORIGINAL CHART LOADING FUNCTION
+    function loadPieChart(type, start = null, end = null, retryCount = 0) {
+      if (retryCount > 0) {
+        console.log('Clearing chart state for retry...');
+        try {
+          Plotly.purge('pointsPieChart');
+        } catch (e) {
+          console.log('Chart purge failed (expected for first load):', e.message);
+        }
+      }
+      
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+      }
+
+      console.log(`Loading chart: type=${type}, start=${start}, end=${end}, retry=${retryCount}`);
+      
+      const fetchDelay = (retryCount > 0 && type === "total") ? 1500 : 0;
+      
+      setTimeout(() => {
+        fetch(`/get_chart_data?type=${type}&start=${start || ""}&end=${end || ""}`)
+          .then(response => {
+            console.log(`Response status: ${response.status}`);
+            
+            if (loadingOverlay) {
+              loadingOverlay.style.display = 'none';
+            }
+            
+            if (!response.ok) {
+              // Handle different HTTP status codes
+              if (response.status === 400) {
+                // Data not available - NO RETRY, show error immediately
+                return response.json().then(errorData => {
+                  const backendMessage = errorData.error || 'Not enough data available for the selected range.';
+                  console.log('Data not available:', backendMessage);
+                  showNotification(backendMessage, "error");
+                  throw new Error('DATA_NOT_AVAILABLE'); // Special error type
+                }).catch(parseError => {
+                  if (parseError.message === 'DATA_NOT_AVAILABLE') {
+                    throw parseError; // Re-throw to prevent retry
+                  }
+                  // If JSON parsing failed, still don't retry for 400 errors
+                  showNotification('Not enough data available for the selected range.', "error");
+                  throw new Error('DATA_NOT_AVAILABLE');
+                });
+              } else {
+                // Server errors (500+) or other errors - attempt retry
+                return response.json().then(err => { 
+                  console.error('Server error:', err);
+                  throw err; 
+                }).catch(() => { 
+                  console.error('Failed to parse error response');
+                  throw {error: "Server temporarily unavailable. Please try again."}; 
+                });
+              }
+            }
+            
+            return response.json();
+          })
+          .then(data => {
+            console.log('Received data:', data);
+            
+            if (data.error) {
+              console.error('Data error:', data.error);
+              
+              // Only retry for server errors, not data availability errors
+              if (retryCount < 3 && !data.error.toLowerCase().includes('not available') && !data.error.toLowerCase().includes('required files')) {
+                const retryDelay = retryCount === 0 ? 1000 : 2000;
+                console.log(`Retrying chart load in ${retryDelay}ms... (attempt ${retryCount + 1})`);
+                setTimeout(() => {
+                  loadPieChart(type, start, end, retryCount + 1);
+                }, retryDelay);
+                return;
+              }
+              
+              // Show the actual error message from backend
+              showNotification(data.error, "error");
+              return;
+            }
+            
+            const trace = Array.isArray(data) ? data[0] : data.data[0];
+            
+            if (!trace || !trace.labels || !trace.values || trace.labels.length === 0) {
+              console.error('Invalid or empty data received:', trace);
+              
+              if (retryCount < 3) {
+                console.log(`Retrying due to invalid data... (attempt ${retryCount + 1})`);
+                setTimeout(() => {
+                  loadPieChart(type, start, end, retryCount + 1);
+                }, 1500);
+                return;
+              }
+              
+              showNotification("No data available to display the chart.", "warning");
+              return;
+            }
+            
+            labels.length = 0;
+            dataValues.length = 0;
+            
+            trace.labels.forEach(l => labels.push(l));
+            trace.values.forEach(v => dataValues.push(v));
+            visibilityState = new Array(trace.labels.length).fill(true);
+
+            Plotly.react('pointsPieChart', data);
+            const plotDiv = document.getElementById("pointsPieChart");
+            if (plotDiv) {
+              plotDiv.on('plotly_legendclick', legendClickHandler);
+              plotDiv.on('plotly_legenddoubleclick', legendDoubleClickHandler);
+            }
+            
+            // Success message
+            showNotification(`Chart loaded successfully! (${trace.labels.length} members)`, "success");
+            console.log("Data loaded successfully:", data);
+          })
+          .catch(err => {
+            if (loadingOverlay) {
+              loadingOverlay.style.display = 'none';
+            }
+            console.error('Load error:', err);
+            
+            // Don't retry if it's a data availability error
+            if (err.message === 'DATA_NOT_AVAILABLE') {
+              console.log('Data not available, not retrying.');
+              return;
+            }
+            
+            // Only retry for network/server errors
+            if (retryCount < 3) {
+              const retryDelay = retryCount === 0 ? 1000 : 2000;
+              console.log(`Retrying chart load due to error in ${retryDelay}ms... (attempt ${retryCount + 1})`);
+              setTimeout(() => {
+                loadPieChart(type, start, end, retryCount + 1);
+              }, retryDelay);
+              return;
+            }
+            
+            showNotification(err.error || "Failed to load chart data. Please try refreshing the page.", "error");
+          });
+      }, fetchDelay);
+    }
+
+    // PRESERVE ORIGINAL LEGEND HANDLERS
+    function legendDoubleClickHandler(eventData){
+      return false;
+    };
+
+    function legendClickHandler(eventData){
+      const chart = document.getElementById("pointsPieChart");
+      const clickedLabel = eventData.label;
+      const clickedIndex = labels.indexOf(clickedLabel);
+
+      visibilityState[clickedIndex] = !visibilityState[clickedIndex];
+
+      let updatedValues = dataValues.map((val, i) => visibilityState[i] ? val : 0);
+      const totalVisible = updatedValues.reduce((sum, v) => sum + v, 0);
+
+      const updatedText = updatedValues.map((val, i) => {
+        if (val === 0 || totalVisible === 0) return "";
+        const percent = (val / totalVisible) * 100;
+        return percent >= 0.95 ? `${labels[i]} (${percent.toFixed(1)}%)` : "";
+      });
+
+      chart.classList.add("fade-out");
+
+      setTimeout(() => {
+        Plotly.restyle("pointsPieChart", {
+          values: [updatedValues],
+          text: [updatedText]
+        });
+
+        setTimeout(() => {
+          const legendItems = document.querySelectorAll('#pointsPieChart .legendtext');
+          legendItems.forEach((item) => {
+            const labelText = item.textContent.split('(')[0].trim();
+            const labelIndex = labels.indexOf(labelText);
+            if (labelIndex !== -1 && !visibilityState[labelIndex]) {
+              item.classList.add('strikethrough');
+            } else {
+              item.classList.remove('strikethrough');
+            }
+          });
+        }, 100);
+
+        chart.classList.remove("fade-out");
+        chart.classList.add("fade-in");
+        setTimeout(() => {
+          chart.classList.remove("fade-in");
+        }, 500);
+      }, 600);
+
+      return false;
+    };
+
+    // Modern notification system
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `notification notification-${type}`;
+      notification.innerHTML = `
+        <div class="notification-content">
+          <span class="notification-icon">${type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
+          <span class="notification-message">${message}</span>
+        </div>
+      `;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => notification.classList.add('show'), 100);
+      setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => document.body.removeChild(notification), 300);
+      }, 4000);
+    }
+
+    // PRESERVE ORIGINAL INITIALIZATION
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM content loaded, attempting chart initialization...');
+      initializePage();
+    });
+
+    window.onload = function() {
+      console.log('Window loaded, attempting chart initialization...');
+      if (!window.pageInitialized) {
+        initializePage();
+      }
+    };
+
+    function initializePage() {
+      if (window.pageInitialized) {
+        console.log('Page already initialized, skipping...');
+        return;
+      }
+      
+      console.log('Page loaded, initializing...');
+      window.pageInitialized = true;
+      
+      // Initialize particles
+      createParticles();
+
+      if (!chartSelector || !startDateInput || !endDateInput || !applyBtn) {
+        console.error('Required elements not found');
+        return;
+      }
+
+      if (chartSelector.value === "custom") {
+        document.getElementById("dateControls").classList.add('active');
+      } else {
+        if (chartSelector.value === "total") {
+          console.log('Loading initial total chart...');
+          setTimeout(() => {
+            loadPieChart("total");
+          }, 500);
+        }
+      }
+      
+      // Add modern hover effects
+      const buttons = document.querySelectorAll('.nav-button, .apply-button, .nav-item:not([disabled])');
+      buttons.forEach(button => {
+        button.addEventListener('mouseenter', function() {
+          if (!this.disabled) {
+            this.style.transform = 'translateY(-2px) scale(1.02)';
+          }
+        });
+        
+        button.addEventListener('mouseleave', function() {
+          if (!this.disabled) {
+            this.style.transform = '';
+          }
+        });
+      });
+    }
+
+    // Simple hover-based scroll control
+    document.addEventListener('DOMContentLoaded', function() {
+        let isOverLegend = false;
+        
+        function disablePageScroll() {
+            document.body.style.overflow = 'hidden';
+            isOverLegend = true;
+        }
+        
+        function enablePageScroll() {
+            document.body.style.overflow = '';
+            isOverLegend = false;
+        }
+        
+        // Function to set up legend hover detection
+        function setupLegendScrollControl() {
+            // Wait for Plotly to render
+            setTimeout(() => {
+                const plotlyDivs = document.querySelectorAll('.js-plotly-plot');
+                
+                plotlyDivs.forEach(plotDiv => {
+                    // Find legend elements within this plot
+                    const legends = plotDiv.querySelectorAll('.legend, .scrollbox, [class*="legend"]');
+                    
+                    legends.forEach(legend => {
+                        legend.addEventListener('mouseenter', disablePageScroll);
+                        legend.addEventListener('mouseleave', enablePageScroll);
+                    });
+                    
+                    // Also check for dynamically created legend elements
+                    const observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            if (mutation.addedNodes) {
+                                mutation.addedNodes.forEach(function(node) {
+                                    if (node.nodeType === 1) {
+                                        const newLegends = node.querySelectorAll('.legend, .scrollbox, [class*="legend"]');
+                                        newLegends.forEach(legend => {
+                                            legend.addEventListener('mouseenter', disablePageScroll);
+                                            legend.addEventListener('mouseleave', enablePageScroll);
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    
+                    observer.observe(plotDiv, { childList: true, subtree: true });
+                });
+            }, 1000);
+        }
+        
+        // Set up when page loads
+        setupLegendScrollControl();
+        
+        // Also set up when new charts are created
+        window.addEventListener('plotly_afterplot', setupLegendScrollControl);
+        
+        // Fallback: re-enable scroll if mouse leaves the window entirely
+        document.addEventListener('mouseleave', function() {
+            if (isOverLegend) {
+                enablePageScroll();
+            }
+        });
+    });
+  </script>
+</body>
+</html>

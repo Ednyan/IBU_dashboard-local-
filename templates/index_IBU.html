@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>I.B.U TEAM SCRAPER</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='index.css') }}?v={{ range(1000, 9999) | random }}">
+</head>
+<body>
+  <!-- Particles container -->
+  <div class="particles-container" id="particles"></div>
+
+  <!-- Main landing container -->
+  <div class="landing-container" id="main-container">
+    <!-- Logo section -->
+    <div class="logo-container">
+      <img id="logo_IBU" src="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}" alt="IBU Logo">
+    </div>
+
+    <!-- Content area -->
+    <div class="content-area">
+      <img id="IBU_text" src="{{ url_for('static', filename='IBU_text.svg') }}" alt="IBU Logo">
+      <!-- Main action button -->
+      <a href="{{ url_for('visualization') }}" class="hero-button">
+        Team Data Analysis
+      </a>
+
+      <!-- Information section -->
+      <div class="info-container">
+        <p class="update-info" id="latest_date">New CSV received {{ time_ago }}</p>
+        <p class="app-info">Data from {{ latest_date }}</p>
+        
+        <p class="creator-credit">by Mindeformer with the assistance of Copilot and the support of our kind I.B.U members</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Typewriter text panel (hidden initially) -->
+  <div class="text-panel" id="text-panel">
+    <div class="text-content">
+      <h2>Welcome to I.B.U Dashboard</h2>
+      <div class="typewriter-text" id="typewriter-text"></div>
+      <button class="back-button" id="back-button">← Back</button>
+    </div>
+  </div>
+
+  <!-- Add Google Drive connection status at top right -->
+  <div class="connection-status" id="connection-status">
+    <div class="status-indicator" id="status-indicator" onclick="checkGoogleDriveConnection()" style="cursor: pointer;" title="Click to refresh connection status">
+      <span class="status-icon">🔄</span>
+      <span class="status-text">Checking connection...</span>
+    </div>
+  </div>
+
+  <!-- Move stats panel OUTSIDE the landing-container for proper positioning -->
+  <div class="stats-panel loaded" id="stats-panel">
+    <div class="live-stats" id="live-stats">
+      <h3>📊 Daily Statistics</h3>
+      <div class="stat-item">
+        <span class="stat-icon">�</span>
+        <span class="stat-label">Loading stats...</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Particle system
+    function createParticles() {
+      const container = document.getElementById('particles');
+      const particleCount = 15;
+
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        
+        // Random size between 2-6px
+        const size = Math.random() * 4 + 2;
+        particle.style.width = size + 'px';
+        particle.style.height = size + 'px';
+        
+        // Random position
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.top = Math.random() * 100 + '%';
+        
+        // Random animation delay
+        particle.style.animationDelay = Math.random() * 6 + 's';
+        particle.style.animationDuration = (Math.random() * 3 + 4) + 's';
+        
+        container.appendChild(particle);
+      }
+    }
+
+    // Initialize particles when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      createParticles();
+      
+      // Debug: Force stats panel visibility
+      const statsPanel = document.getElementById('stats-panel');
+      const liveStats = document.getElementById('live-stats');
+      
+      console.log('🔍 Stats panel element:', statsPanel);
+      console.log('🔍 Live stats element:', liveStats);
+      
+      if (statsPanel) {
+        // Force all visibility properties
+        statsPanel.style.position = 'fixed';
+        statsPanel.style.top = '50%';
+        statsPanel.style.right = '2rem';
+        statsPanel.style.transform = 'translateY(-50%)';
+        statsPanel.style.zIndex = '999';
+        statsPanel.style.display = 'block';
+        statsPanel.style.visibility = 'visible';
+        statsPanel.style.opacity = '1';
+        statsPanel.style.width = '320px';
+        
+        console.log('✅ Forced stats panel visibility');
+        console.log('🔍 Stats panel computed style:', window.getComputedStyle(statsPanel));
+      } else {
+        console.error('❌ Stats panel element not found!');
+      }
+      
+      if (liveStats) {
+        liveStats.style.display = 'flex';
+        liveStats.style.visibility = 'visible';
+        liveStats.style.opacity = '1';
+        liveStats.style.background = 'rgba(42, 42, 42, 0.95)';
+        liveStats.style.border = '3px solid rgba(224, 97, 80, 0.8)';
+        console.log('✅ Forced live stats visibility');
+      } else {
+        console.error('❌ Live stats element not found!');
+      }
+      
+      // Interactive logo effects
+      const logo = document.getElementById('logo_IBU');
+      const mainContainer = document.getElementById('main-container');
+      const textPanel = document.getElementById('text-panel');
+      const backButton = document.getElementById('back-button');
+      const typewriterText = document.getElementById('typewriter-text');
+      
+      let isExpanded = false;
+      
+      // Logo hover effects
+      logo.addEventListener('mouseenter', function() {
+        this.style.transform = 'scale(0.9) rotate(5deg)';
+        this.style.filter = 'drop-shadow(0 0 60px rgba(224, 97, 80, 0.8))';
+      });
+      
+      logo.addEventListener('mouseleave', function() {
+        this.style.transform = 'scale(0.8) rotate(0deg)';
+        this.style.filter = 'drop-shadow(0 0 30px rgba(224, 97, 80, 0.3))';
+      });
+      
+      // Logo click functionality with toggle
+      logo.addEventListener('click', function() {
+        const mainContainer = document.getElementById('main-container');
+        const textPanel = document.getElementById('text-panel');
+        const titleElement = document.querySelector('.text-content h2');
+        const textElement = document.getElementById('typewriter-text');
+        const buttonElement = document.getElementById('back-button'); // Add button reference
+
+        if (!isExpanded) {
+          isExpanded = true;
+          
+          // Mobile vs Desktop logic
+          if (window.innerWidth <= 768) {
+            textPanel.classList.add('active');
+          } else {
+            mainContainer.style.transform = 'translateX(-25%)';
+            textPanel.style.transform = 'translateX(0)';
+            textPanel.style.opacity = '1';
+          }
+          
+          // Add text content and trigger fade-in
+          setTimeout(() => {
+            // Set the body text content (your specific text)
+            textElement.innerHTML = `We are Intelligent Beings United!<br><br>
+        Welcome to our dashboard, your comprehensive tool for analyzing team performance and statistics.
+
+This dashboard provides daily insights into team data, allowing you to:<br><br>
+
+• Track team members points<br>
+• Analyze performance metrics over time (in development)<br>
+• See individual team member contributions (in development)<br>
+• Export data for further analysis (in development)<br><br>
+
+The system automatically scrapes and updates team information, ensuring you always have the latest data at your fingertips.<br><br>
+
+Click the button below to explore the interactive visualizations and dive deep into your team's data.`;
+            
+            // Trigger title fade-in (first)
+            setTimeout(() => {
+              titleElement.classList.add('fade-in');
+            }, 200);
+            
+            // Trigger text fade-in (second)
+            setTimeout(() => {
+              textElement.classList.add('fade-in');
+            }, 500);
+            
+            // Trigger button fade-in (last)
+            setTimeout(() => {
+              buttonElement.classList.add('fade-in');
+            }, 800);
+            
+          }, 600);
+
+        } else {
+          // Close panel
+          isExpanded = false;
+          
+          // Remove fade-in classes from all elements
+          titleElement.classList.remove('fade-in');
+          textElement.classList.remove('fade-in');
+          buttonElement.classList.remove('fade-in'); // Add button cleanup
+          
+          if (window.innerWidth <= 768) {
+            textPanel.classList.remove('active');
+          } else {
+            mainContainer.style.transform = 'translateX(0)';
+            textPanel.style.transform = 'translateX(100%)';
+            textPanel.style.opacity = '0';
+          }
+          
+          // Clear text content after animation
+          setTimeout(() => {
+            textElement.innerHTML = '';
+          }, 600);
+        }
+      });
+      
+      // Back button functionality
+      backButton.addEventListener('click', function() {
+        const titleElement = document.querySelector('.text-content h2');
+        const textElement = document.getElementById('typewriter-text');
+        const buttonElement = document.getElementById('back-button');
+        
+        isExpanded = false;
+        
+        // Remove fade-in classes
+        titleElement.classList.remove('fade-in');
+        textElement.classList.remove('fade-in');
+        buttonElement.classList.remove('fade-in');
+        
+        if (window.innerWidth <= 768) {
+          textPanel.classList.remove('active');
+        } else {
+          mainContainer.style.transform = 'translateX(0)';
+          textPanel.style.transform = 'translateX(100%)';
+          textPanel.style.opacity = '0';
+        }
+        
+        // Clear text content after animation
+        setTimeout(() => {
+          textElement.innerHTML = '';
+        }, 600);
+      });
+      
+      // Close panel function
+      function closePanel() {
+        isExpanded = false;
+        if (window.innerWidth <= 768) {
+          // Mobile: Hide full screen panel
+          textPanel.classList.remove('active');
+        } else {
+          // Desktop: Slide back
+          mainContainer.style.transform = 'translateX(0)';
+          textPanel.style.transform = 'translateX(100%)';
+        }
+        textPanel.style.opacity = '0';
+        
+        // Reset text content
+        typewriterText.innerHTML = '';
+        typewriterText.classList.remove('fade-in');
+      }
+      
+      // Smooth reveal effect (replaces typewriter)
+      function startSmoothReveal() {
+        const text = `We are Intelligent Beings United!
+        Welcome to our dashboard, your comprehensive tool for analyzing team performance and statistics.
+
+This dashboard provides daily insights into team data, allowing you to:
+
+• Track team members points
+• Analyze performance metrics over time (in development)
+• See individual team member contributions (in development)
+• Export data for further analysis (in development)
+
+The system automatically scrapes and updates team information, ensuring you always have the latest data at your fingertips.
+
+Click the button below to explore the interactive visualizations and dive deep into your team's data.`;
+        
+        // Set text content immediately
+        typewriterText.innerHTML = text.replace(/\n/g, '<br>');
+        
+        // Add fade-in class for smooth appearance
+        setTimeout(() => {
+          typewriterText.classList.add('fade-in');
+        }, 200);
+      }
+      
+      // Update the smoothReveal function in the HTML file
+      function smoothReveal() {
+        const titleElement = document.querySelector('.text-content h2');
+        const textElement = document.getElementById('typewriter-text');
+        
+        // Set the text content
+        textElement.innerHTML = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+        
+        // Trigger fade-in animations
+        setTimeout(() => {
+          titleElement.classList.add('fade-in');
+        }, 200);
+        
+        setTimeout(() => {
+          textElement.classList.add('fade-in');
+        }, 500);
+      }
+      
+      // Handle window resize
+      window.addEventListener('resize', function() {
+        if (textPanel.style.opacity === '1') {
+          textPanel.classList.remove('active');
+          mainContainer.style.transform = 'translateX(0)';
+          textPanel.style.transform = 'translateX(100%)';
+          textPanel.style.opacity = '0';
+          typewriterText.innerHTML = '';
+          typewriterText.classList.remove('fade-in');
+        }
+      });
+    });
+    
+    // Add this script to index_IBU.html to load live stats
+
+    async function loadLiveStats() {
+      console.log('🔄 Loading live stats...');
+      const statsContainer = document.getElementById('live-stats');
+      
+      // Show loading state
+      statsContainer.innerHTML = `
+        <h3>📊 Daily Statistics</h3>
+        <div class="stat-item">
+          <span class="stat-icon">🔄</span>
+          <span class="stat-label">Loading data...</span>
+        </div>
+      `;
+      
+      try {
+        // Try the simple stats endpoint first
+        console.log('📡 Fetching from /get_simple_stats...');
+        const response = await fetch('/get_simple_stats');
+        console.log('📡 Stats response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📦 Stats data received:', data);
+          
+          if (data.success && data.stats) {
+            const stats = data.stats;
+            console.log('✅ Processing stats:', stats);
+            
+            statsContainer.innerHTML = `
+              <h3>📊 Daily Statistics</h3>
+              <div class="stat-item">
+                <span class="stat-icon">🏆</span>
+                <span class="stat-label">Total Points:</span>
+                <span class="stat-value">${stats.total_points.toLocaleString()}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-icon">👥</span>
+                <span class="stat-label">Active Members:</span>
+                <span class="stat-value">${stats.active_members}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-icon">⭐</span>
+                <span class="stat-label">Top 5 Performers:</span>
+              </div>
+              <div class="top-performers">
+                ${stats.top_performers.map((performer, index) => `
+                  <div class="performer-item">
+                    <span class="performer-rank">${index + 1}.</span>
+                    <span class="performer-name">${performer.name}</span>
+                    <span class="performer-points">${performer.points.toLocaleString()}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+            
+            console.log('✅ Stats UI updated successfully');
+            document.getElementById('stats-panel').classList.add('loaded');
+            return; // Success, exit function
+          } else {
+            console.error('❌ Invalid stats data structure:', data);
+            throw new Error(data.error || 'Invalid stats data structure');
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('❌ HTTP error response:', errorText);
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error('❌ Stats loading failed:', error);
+        
+        // Show error state with retry
+        statsContainer.innerHTML = `
+          <h3>📊 Statistics</h3>
+          <div class="stat-item">
+            <span class="stat-icon">⚠️</span>
+            <span class="stat-label">Failed to load data</span>
+          </div>
+          <div class="stat-item" style="font-size: 0.8rem; color: #999;">
+            <span class="stat-label">Error: ${error.message}</span>
+          </div>
+          <div class="stat-item">
+            <button onclick="loadLiveStats()" style="background: rgba(224, 97, 80, 0.8); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">
+              🔄 Retry Loading
+            </button>
+          </div>
+        `;
+        document.getElementById('stats-panel').classList.add('loaded');
+      }
+    }
+
+
+    // Add Google Drive connection check function with retry logic
+    function checkGoogleDriveConnection(retryCount = 0) {
+      const statusIndicator = document.getElementById('status-indicator');
+      const maxRetries = 2;
+      
+      // Set checking state with spinning animation
+      statusIndicator.className = 'status-indicator checking';
+      statusIndicator.innerHTML = `
+        <span class="status-icon">🔄</span>
+        <span class="status-text">Checking...</span>
+      `;
+      
+      console.log(`🔄 Checking Google Drive connection (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+      
+      fetch('/check_drive_connection')
+        .then(response => {
+          console.log('📡 Response status:', response.status);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('📦 Response data:', data);
+          
+          if (data.connected === true) {
+            statusIndicator.className = 'status-indicator success';
+            statusIndicator.innerHTML = `
+              <span class="status-icon">✅</span>
+              <span class="status-text">Drive Connected</span>
+            `;
+            console.log('✅ Connection successful on attempt', retryCount + 1);
+          } else {
+            // If connection failed and we have retries left, try again
+            if (retryCount < maxRetries) {
+              console.log('⚠️ Connection failed, retrying in 1 second...');
+              setTimeout(() => {
+                checkGoogleDriveConnection(retryCount + 1);
+              }, 1000);
+              return;
+            }
+            
+            statusIndicator.className = 'status-indicator error';
+            statusIndicator.innerHTML = `
+              <span class="status-icon">❌</span>
+              <span class="status-text">Drive Offline</span>
+            `;
+            console.log('❌ Connection failed after all retries:', data.message || 'Unknown reason');
+          }
+        })
+        .catch(error => {
+          console.error('❌ Connection check error:', error);
+          
+          // If we have retries left and this was a network error, try again
+          if (retryCount < maxRetries && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            console.log('🔄 Network error, retrying in 1 second...');
+            setTimeout(() => {
+              checkGoogleDriveConnection(retryCount + 1);
+            }, 1000);
+            return;
+          }
+          
+          statusIndicator.className = 'status-indicator error';
+          statusIndicator.innerHTML = `
+            <span class="status-icon">⚠️</span>
+            <span class="status-text">Connection Error</span>
+          `;
+        })
+        .finally(() => {
+          // Only mark as loaded if we're not retrying
+          if (retryCount >= maxRetries || statusIndicator.className !== 'status-indicator checking') {
+            document.getElementById('connection-status').classList.add('loaded');
+          }
+        });
+    }
+
+    // Load stats and connection when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      // Load stats immediately
+      setTimeout(() => {
+        console.log('🔄 Loading stats...');
+        loadLiveStats();
+      }, 1000);
+      
+      // Check connection after stats
+      setTimeout(() => {
+        console.log('🔄 Checking connection...');
+        checkGoogleDriveConnection();
+      }, 1500);
+    });
+  </script>
+</body>
+</html>

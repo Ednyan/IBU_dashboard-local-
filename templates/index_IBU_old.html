@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>I.B.U TEAM SCRAPER</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
+  <script>
+    async function runScraper() {
+      const form = document.getElementById('loginForm');
+      const formData = new FormData(form);
+      console.log("tried to run scraper");
+      const response = await fetch('/scrape', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      const output = document.getElementById('output');
+
+      if (result.success) {
+        output.innerHTML = "<pre>" + JSON.stringify(result.data, null, 2) + "</pre>";
+        if (result.latest_date) {
+          latest_date_element.innerText = "Updated to " + result.latest_date;
+        }
+      } else {
+        output.innerText = "Error: " + result.error;
+      }
+    }
+  </script>
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='index.css') }}">
+</head>
+<body style="background-color:#1A1A1A;">
+  <div class="flex-container">
+    <img id=logo_IBU src="static/IBU_SMILE_ICON.svg" alt="IBU_Logo">
+    <h1 style="color:white; font-family:'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; margin-left: 1vw; font-size: 3vw; flex:12">I.B.U TEAM SCRAPER</h1>
+    <h1 style="color:white; font-family:'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; margin-right: 1vw; font-size: 1vw; flex:12; align-content:center; text-align:right">App last updated on 01 June, 2025 <br> by Mindeformer</h1>
+  </div>
+  <div class="flex-container">
+    <div class="left">
+      <div style="display:flex">
+        <img id=logo_sheep-it src="static/sheep-it_logo.svg" alt="SheepIT_Logo">
+        <h2 class="label" style="flex:1; font-size:1.8vw;">Sheep-IT Login <br> to run scraper</h2>
+      </div>
+      <form id="loginForm" onsubmit="event.preventDefault(); runScraper();">
+        <label class=label>Username: <input class=input name="username" required></label><br><br>
+        <label class=label>Password: <input class=input name="password" type="password" required></label><br>
+        <button class= "modern-button inactive-btn" id="runScraperBtn" type="submit" >Run Scraper</button>
+      </form>
+    </div>
+    <div class=right>
+        <h1 style="color:white; font-family:'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; margin-right: 1vw; font-size: 1.5vw; flex:12; align-content:center;">Scraping Progress</h1>
+        <div class="progress-bar">
+          <div id="progress-bar-fill" class="progress-bar-fill"></div>
+        </div>
+        <h1 style="color:white; font-family:'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; margin-right: 1vw; font-size: 1.5vw; flex:12; align-content:center;">Status</h1>
+        <p id="progress_status" class="label"></p>
+        <h1 style="color:white; font-family:'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; margin-right: 1vw; font-size: 1.5vw; flex:12; align-content:center;">Output</h1>
+        <div id="outputPathContainer" style="display:none;">
+          <p class="label" style="text-align:left word-break:break-all; white-space:normal;"> Data was saved successfully in: <br>
+            <span id="folderPath">
+              {{saved_file}}
+            </span>
+            <span id="copyMsg" style="color:#eeb415; display:none;">(Copied to Clipboard!)</span>
+          </p>
+        </div>
+        <!-- <div id="output" style="color:white; font-family:'Helvetica Neue', 'Helvetica', 'Arial', sans-serif; text-align:center"></div> -->
+    </div>
+    <div class=right>
+      <a style="align-content: center; text-align:center;margin: auto; display:block;" href="{{ url_for('visualization') }}">
+        <button class="modern-button" >Team Data Analysis</button>
+      </a>
+      <p id="latest_date" class="label">Updated to {{latest_date}}</p>
+    </div>
+  </div>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const runBtn = document.getElementById('runScraperBtn');
+  const progressOutput = document.getElementById('progress_status');
+  const progressBarFill = document.getElementById('progress-bar-fill');
+  const progress_status = document.getElementById('progress_status');
+  const latest_date_element = document.getElementById('latest_date');
+  const evtSource = new EventSource('/progress_stream');
+  //progress_status.style.display = "none";
+
+  const folderPath = document.getElementById('folderPath');
+  const copyMsg = document.getElementById('copyMsg');
+  if (folderPath) {
+    folderPath.addEventListener('click', function() {
+      const text = folderPath.textContent.trim();
+      navigator.clipboard.writeText(text).then(function() {
+        if (copyMsg) {
+          copyMsg.style.display = 'inline';
+          setTimeout(() => { copyMsg.style.display = 'none'; }, 1200);
+        }
+      });
+    });
+  }
+
+  runBtn.classList.remove('inactive-btn');
+  const outputPathContainer = document.getElementById('outputPathContainer');
+  outputPathContainer.style.display = "none";
+  evtSource.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+      progressOutput.innerText = data.msg;
+      progressBarFill.style.width = data.percent + "%";
+      progressBarFill.innerText = data.percent > 0 ? Math.round(data.percent) + "%" : "";
+      const outputPathContainer = document.getElementById('outputPathContainer');
+      /* Hide or show progress_status based on percent
+      if (data.percent <= 0) {
+        progress_status.style.display = "none";
+      }
+      else {
+        progress_status.style.display = "block";
+      }*/
+
+      if (data.msg.includes("Data saved successfully!")) {
+        outputPathContainer.style.display = "block";
+        if (data.latest_date) {
+            latest_date_element.innerText = "Updated to " + data.latest_date;
+        }
+        if (data.saved_file) {
+            folderPath.innerText = data.saved_file;
+        }
+      }
+
+    } catch (e) {
+      // fallback for plain text
+      progressOutput.innerText = event.data;
+      progressBarFill.style.width = "0%";
+      progressBarFill.innerText = "";
+    }
+  };
+});
+</script>
+</body>
+</html>
