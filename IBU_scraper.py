@@ -441,7 +441,7 @@ def get_custom_text(values, labels):
         else:
             percent = (v / total) * 100
             if percent >= 0.95:
-                result.append(f"{labels[i]} ({percent:.1f}%)")
+                result.append(f"   {labels[i]} ({percent:.1f}%)   ")
             else:
                 result.append("")
     return result
