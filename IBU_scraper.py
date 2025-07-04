@@ -448,10 +448,6 @@ def get_custom_text(values, labels):
 
 app = Flask(__name__) #. .venv/bin/activate
 
-# Add this for production
-if os.environ.get('FLASK_ENV') == 'production':
-    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 year cache
-
 @app.route('/')
 def index():
     file_path, date_str, file_timestamp = get_latest_csv_file()

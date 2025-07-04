@@ -3,7 +3,7 @@ services:
     name: ibu-dashboard
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python IBU_scraper.py"
+    startCommand: "gunicorn --config gunicorn.conf.py IBU_scraper:app"
     envVars:
       - key: FLASK_ENV
         value: production
