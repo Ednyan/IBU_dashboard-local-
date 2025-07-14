@@ -12,9 +12,9 @@ SCRAPED_TEAM_INFO_FOLDER = "Scraped_Team_Info"
 LOGIN_URL = "https://www.sheepit-renderfarm.com/user/authenticate"
 TEAM_URL = "https://www.sheepit-renderfarm.com/team/2109"
 
-# Login credentials - You'll need to set these as environment variables or modify as needed
-USERNAME = "Data_Seeker"
-PASSWORD = "data_seeker_42"
+# Login credentials
+USERNAME = "username_here"  # Replace with your SheepIt username
+PASSWORD = "password_here"  # Replace with your SheepIt password
 
 def name_to_color(name):
     """Generate a consistent color for a team member name"""
