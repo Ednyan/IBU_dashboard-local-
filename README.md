@@ -81,70 +81,101 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
    pip install -r requirements.txt
    ```
 
-3. **Set up Google Drive credentials**
+3. **Set up SheepIt credentials for data scraping**
    ```bash
-   # Set environment variable with your service account JSON
-   export GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
+   # Windows
+   set SHEEPIT_USERNAME=your_username
+   set SHEEPIT_PASSWORD=your_password
    
-   # Or for development, place service_account.json in project root
+   # Linux/Mac
+   export SHEEPIT_USERNAME=your_username
+   export SHEEPIT_PASSWORD=your_password
    ```
 
-4. **Run the application**
+4. **Run the scraper to get initial data**
    ```bash
-   python IBU_scraper.py
+   python sheepit_scraper.py
    ```
 
-5. **Open your browser**
+5. **Run the dashboard application**
+   ```bash
+   python IBU_dashboard.py
+   ```
+
+6. **Open your browser**
    Navigate to `http://localhost:5000`
 
-## 🌐 Deployment
+## 🤖 SheepIt Data Scraper
 
-### Deploy to Render
+The dashboard includes an integrated data scraper (`sheepit_scraper.py`) that fetches team data from SheepIt Renderfarm.
 
-1. **Fork this repository** to your GitHub account
+### Scraper Setup
 
-2. **Create a new Web Service** on [Render](https://render.com)
+#### Method 1: Environment Variables (Recommended)
+```bash
+# Windows
+set SHEEPIT_USERNAME=your_username
+set SHEEPIT_PASSWORD=your_password
 
-3. **Set environment variables**:
-   ```
-   GOOGLE_SERVICE_ACCOUNT_KEY = (your service account JSON)
-   FLASK_ENV = production
-   ```
+# Linux/Mac
+export SHEEPIT_USERNAME=your_username
+export SHEEPIT_PASSWORD=your_password
+```
 
-4. **Deploy** and enjoy your live dashboard!
+#### Method 2: Direct Edit
+Edit `sheepit_scraper.py` and replace the placeholder credentials:
+```python
+USERNAME = "your_username_here"
+PASSWORD = "your_password_here"
+```
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+### Running the Scraper
 
-## 📋 Configuration
+#### Manual Run
+```bash
+python sheepit_scraper.py
+```
 
-### Environment Variables
+#### Automated Scheduling
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | Google Service Account JSON credentials | Yes |
-| `FLASK_ENV` | Flask environment (development/production) | No |
-| `PORT` | Port number (auto-set by hosting platforms) | No |
-| `DATA_FOLDER` | Local data storage folder | No |
+**Windows Task Scheduler:**
+1. Open Task Scheduler
+2. Create Basic Task
+3. Set trigger (e.g., daily at specific time)
+4. Set action to run: `python path\to\sheepit_scraper.py`
 
-### Google Drive Setup
+**Linux/Mac Cron Job:**
+```bash
+# Edit crontab
+crontab -e
 
-1. Create a Google Cloud Project
-2. Enable Google Drive API
-3. Create a Service Account
-4. Download the JSON key file
-5. Share your SheepIt data folder with the service account email
+# Add line for daily run at 9 AM
+0 9 * * * cd /path/to/dashboard && python sheepit_scraper.py
+```
 
-Detailed setup instructions available in [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md)
+### Scraper Output
 
-## 🎯 Features & Goals
+The scraper will:
+- Log into SheepIt Renderfarm
+- Fetch team data from team page
+- Save as `sheepit_team_points_YYYY-MM-DD.csv` in `Scraped_Team_Info/`
+- Dashboard automatically detects new files within 30 seconds
+
+### Troubleshooting
+
+- **Login fails**: Verify username and password
+- **No team data**: Ensure access to team 2109  
+- **File save errors**: Check `Scraped_Team_Info/` folder permissions
+
+##  Features & Goals
 
 ### ✅ **Current Features**
 - Real-time team statistics display
 - Interactive member contribution charts
-- Automated data synchronization
+- Local file-based data storage
+- Integrated data scraper
 - Responsive, modern UI
-- Secure credential management
-- Production-ready deployment
+- Automatic file detection
 
 ### 🚧 **Planned Features**
 - Historical performance trends

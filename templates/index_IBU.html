@@ -44,14 +44,6 @@
     </div>
   </div>
 
-  <!-- Add Google Drive connection status at top right -->
-  <div class="connection-status" id="connection-status">
-    <div class="status-indicator" id="status-indicator" onclick="checkGoogleDriveConnection()" style="cursor: pointer;" title="Click to refresh connection status">
-      <span class="status-icon">🔄</span>
-      <span class="status-text">Checking connection...</span>
-    </div>
-  </div>
-
   <!-- Move stats panel OUTSIDE the landing-container for proper positioning -->
   <div class="stats-panel loaded" id="stats-panel">
     <div class="live-stats" id="live-stats">
@@ -420,84 +412,78 @@ Click the button below to explore the interactive visualizations and dive deep i
       }
     }
 
+    // File monitoring and update functions
+    let lastKnownFile = '';
+    let fileCheckInterval;
 
-    // Add Google Drive connection check function with retry logic
-    function checkGoogleDriveConnection(retryCount = 0) {
-      const statusIndicator = document.getElementById('status-indicator');
-      const maxRetries = 2;
-      
-      // Set checking state with spinning animation
-      statusIndicator.className = 'status-indicator checking';
-      statusIndicator.innerHTML = `
-        <span class="status-icon">🔄</span>
-        <span class="status-text">Checking...</span>
-      `;
-      
-      console.log(`🔄 Checking Google Drive connection (attempt ${retryCount + 1}/${maxRetries + 1})...`);
-      
-      fetch('/check_drive_connection')
-        .then(response => {
-          console.log('📡 Response status:', response.status);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          return response.json();
-        })
+    function updateFileInfo() {
+      fetch('/get_latest_file_info')
+        .then(response => response.json())
         .then(data => {
-          console.log('📦 Response data:', data);
-          
-          if (data.connected === true) {
-            statusIndicator.className = 'status-indicator success';
-            statusIndicator.innerHTML = `
-              <span class="status-icon">✅</span>
-              <span class="status-text">Drive Connected</span>
-            `;
-            console.log('✅ Connection successful on attempt', retryCount + 1);
-          } else {
-            // If connection failed and we have retries left, try again
-            if (retryCount < maxRetries) {
-              console.log('⚠️ Connection failed, retrying in 1 second...');
-              setTimeout(() => {
-                checkGoogleDriveConnection(retryCount + 1);
-              }, 1000);
-              return;
+          if (data.success) {
+            const latestDateElement = document.getElementById('latest_date');
+            const appInfoElement = document.querySelector('.app-info');
+            
+            // Update the "New CSV received" text
+            if (latestDateElement) {
+              latestDateElement.textContent = `New CSV received ${data.time_ago}`;
             }
             
-            statusIndicator.className = 'status-indicator error';
-            statusIndicator.innerHTML = `
-              <span class="status-icon">❌</span>
-              <span class="status-text">Drive Offline</span>
-            `;
-            console.log('❌ Connection failed after all retries:', data.message || 'Unknown reason');
+            // Update the "Data from" text
+            if (appInfoElement) {
+              appInfoElement.textContent = `Data from ${data.latest_date}`;
+            }
+            
+            // Check if this is a new file (different from last known)
+            if (lastKnownFile && lastKnownFile !== data.latest_file) {
+              console.log('🆕 New file detected:', data.latest_file);
+              
+              // Show a subtle notification or animation
+              if (latestDateElement) {
+                latestDateElement.style.animation = 'pulse 2s ease-in-out';
+                setTimeout(() => {
+                  latestDateElement.style.animation = '';
+                }, 2000);
+              }
+              
+              // Refresh stats when new file is detected
+              loadLiveStats();
+            }
+            
+            lastKnownFile = data.latest_file;
+            console.log('📄 File info updated:', data);
+          } else {
+            console.log('⚠️ No file info available:', data.message);
           }
         })
         .catch(error => {
-          console.error('❌ Connection check error:', error);
-          
-          // If we have retries left and this was a network error, try again
-          if (retryCount < maxRetries && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-            console.log('🔄 Network error, retrying in 1 second...');
-            setTimeout(() => {
-              checkGoogleDriveConnection(retryCount + 1);
-            }, 1000);
-            return;
-          }
-          
-          statusIndicator.className = 'status-indicator error';
-          statusIndicator.innerHTML = `
-            <span class="status-icon">⚠️</span>
-            <span class="status-text">Connection Error</span>
-          `;
-        })
-        .finally(() => {
-          // Only mark as loaded if we're not retrying
-          if (retryCount >= maxRetries || statusIndicator.className !== 'status-indicator checking') {
-            document.getElementById('connection-status').classList.add('loaded');
-          }
+          console.error('❌ Error updating file info:', error);
         });
     }
 
-    // Load stats and connection when page loads
+    function startFileMonitoring() {
+      // Update immediately
+      updateFileInfo();
+      
+      // Then check every 30 seconds for new files
+      fileCheckInterval = setInterval(updateFileInfo, 30000);
+      console.log('🔄 File monitoring started - checking every 30 seconds');
+    }
+
+    function stopFileMonitoring() {
+      if (fileCheckInterval) {
+        clearInterval(fileCheckInterval);
+        console.log('⏹️ File monitoring stopped');
+      }
+    }
+
+
+    // Add local file status check function with retry logic
+    function checkLocalFiles(retryCount = 0) {
+      // Function removed - no longer needed for local file operation
+    }
+
+    // Load stats and check files when page loads
     document.addEventListener('DOMContentLoaded', function() {
       // Load stats immediately
       setTimeout(() => {
@@ -505,10 +491,10 @@ Click the button below to explore the interactive visualizations and dive deep i
         loadLiveStats();
       }, 1000);
       
-      // Check connection after stats
+      // Start monitoring for file changes
       setTimeout(() => {
-        console.log('🔄 Checking connection...');
-        checkGoogleDriveConnection();
+        console.log('🔄 Starting file monitoring...');
+        startFileMonitoring();
       }, 1500);
     });
   </script>

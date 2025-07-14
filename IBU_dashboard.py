@@ -1,5 +1,4 @@
 from flask import Flask, request, render_template, jsonify, Response
-from utils import name_to_color
 from datetime import datetime, timedelta
 import pandas as pd
 import os
@@ -9,18 +8,11 @@ import json
 import sys
 import signal
 import atexit
-from Google_Drive_importer import (
-    ensure_files_available, 
-    get_latest_file_path
-)
-import tempfile
+import glob
+import re
 
-# Use temporary directory for cloud deployment
-if os.getenv('RENDER'):  # Render sets this environment variable
-    DATA_FOLDER = tempfile.mkdtemp()
-    print(f"Using temporary storage for cloud deployment: {DATA_FOLDER}")
-else:
-    DATA_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
+# Use local data folder
+DATA_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
 
 progress_queue = queue.Queue()
 layout_height = 550
@@ -33,24 +25,77 @@ def name_to_color(name):
     hex_color = "#" + hash_object.hexdigest()[:6]
     return hex_color
 
-def get_latest_csv_file():
+def get_csv_files_from_folder():
     """
-    Get the latest CSV file from Google Drive, downloading if necessary
+    Get all CSV files from the local Scraped_Team_Info folder
     """
     try:
-        # Get the latest file from Google Drive with timestamp
-        file_path, message, file_timestamp = get_latest_file_path()
-        if file_path and os.path.exists(file_path):
-            # Extract date from filename
-            filename = os.path.basename(file_path)
-            date_str = filename.replace("sheepit_team_points_", "").replace(".csv", "")
-            return file_path, date_str, file_timestamp
-        else:
+        if not os.path.exists(DATA_FOLDER):
+            return []
+        
+        # Get all CSV files matching the pattern sheepit_team_points_YYYY-MM-DD.csv
+        pattern = os.path.join(DATA_FOLDER, "sheepit_team_points_*.csv")
+        csv_files = glob.glob(pattern)
+        
+        # Sort by filename (which contains date) to get most recent first
+        csv_files.sort(reverse=True)
+        
+        return csv_files
+        
+    except Exception as e:
+        print(f"Error getting CSV files from folder: {str(e)}")
+        return []
+
+def get_latest_csv_file():
+    """
+    Get the latest CSV file from the local folder
+    """
+    try:
+        csv_files = get_csv_files_from_folder()
+        
+        if not csv_files:
             return None, None, None
+        
+        latest_file = csv_files[0]
+        
+        # Extract date from filename
+        filename = os.path.basename(latest_file)
+        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+        
+        if date_match:
+            date_str = date_match.group(1)
+            # Get file modification time as timestamp
+            file_timestamp = datetime.fromtimestamp(os.path.getmtime(latest_file))
+            return latest_file, date_str, file_timestamp
+        else:
+            return latest_file, "unknown", datetime.fromtimestamp(os.path.getmtime(latest_file))
             
     except Exception as e:
-        print(f"Error getting latest file from Google Drive: {str(e)}")
+        print(f"Error getting latest file from local folder: {str(e)}")
         return None, None, None
+
+def find_csv_file_by_date(date_str):
+    """
+    Find a CSV file by date string (YYYY-MM-DD format)
+    """
+    try:
+        target_filename = f"sheepit_team_points_{date_str}.csv"
+        target_path = os.path.join(DATA_FOLDER, target_filename)
+        
+        if os.path.exists(target_path):
+            return target_path
+        
+        # If exact match not found, look for any file containing the date
+        csv_files = get_csv_files_from_folder()
+        for file in csv_files:
+            if date_str in os.path.basename(file):
+                return file
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error finding CSV file by date {date_str}: {str(e)}")
+        return None
 
 def get_time_ago_string(file_timestamp):
     """Convert timestamp to 'X time ago' format"""
@@ -91,30 +136,16 @@ def get_time_ago_string(file_timestamp):
         return "Recently"
 
 def get_chart_total():
-    # Use Google Drive importer to ensure the latest file is available
-    file_requests = [
-        {'type': 'latest'}
-    ]
-    
-    result = ensure_files_available(file_requests)
-    if not result['success']:
-        error_msg = "Latest file not available from Google Drive."
-        if result['errors']:
-            error_msg += f" Errors: {'; '.join(result['errors'])}"
-        return {"error": error_msg}
-    
-    if len(result['files']) == 0:
-        return {"error": "No files could be downloaded from Google Drive."}
-    
-    # Use the downloaded file
-    file = result['files'][0]
-    
-    if not os.path.exists(file):
-        return {"error": "Downloaded file is not accessible."}
-    
+    """Get chart data from the latest CSV file in the local folder"""
     try:
+        # Get the latest file from local folder
+        file_path, date_str, file_timestamp = get_latest_csv_file()
+        
+        if not file_path or not os.path.exists(file_path):
+            return {"error": "No CSV files found in the Scraped_Team_Info folder."}
+        
         # Load CSV
-        df = pd.read_csv(file)
+        df = pd.read_csv(file_path)
         
         # Check if file is empty
         if df.empty:
@@ -140,6 +171,7 @@ def get_chart_total():
         return {"error": f"Error processing data file: {str(e)}"}
 
 def get_last_week_range():
+    """Get chart data for last week using local CSV files"""
     today = datetime.today().date()
     last_monday = today - timedelta(days=today.weekday() + 7)
     this_monday = last_monday + timedelta(days=6)
@@ -147,33 +179,20 @@ def get_last_week_range():
     end_date = this_monday.strftime("%Y-%m-%d")
     start_date = last_monday.strftime("%Y-%m-%d")
     
-    # Use Google Drive importer to ensure files are available
-    file_requests = [
-        {'type': 'single_date', 'date': start_date},
-        {'type': 'single_date', 'date': end_date}
-    ]
+    # Find the required CSV files in local folder
+    file_start = find_csv_file_by_date(start_date)
+    file_end = find_csv_file_by_date(end_date)
     
-    result = ensure_files_available(file_requests)
-    if not result['success']:
-        error_msg = "Required files not available for the selected week range."
-        if result['errors']:
-            error_msg += f" Errors: {'; '.join(result['errors'])}"
-        return {"error": error_msg}
+    if not file_start:
+        return {"error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
     
-    if len(result['files']) < 2:
-        return {"error": f"Could not download both required files. Only got {len(result['files'])} files."}
-    
-    # Use the actual downloaded file paths
-    file_start = result['files'][0] if start_date in result['files'][0] else result['files'][1]
-    file_end = result['files'][1] if end_date in result['files'][1] else result['files'][0]
-    
-    # Verify files exist
-    if not os.path.exists(file_start) or not os.path.exists(file_end):
-        return {"error": "Downloaded files are not accessible."}
+    if not file_end:
+        return {"error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
     
     return standardize_range_formats(file_start, file_end)
 
 def get_last_month_range():
+    """Get chart data for last month using local CSV files"""
     today = datetime.today().date()
     first_of_this_month = today.replace(day=1)
     last_month_end = first_of_this_month - timedelta(days=1)
@@ -181,33 +200,20 @@ def get_last_month_range():
     end_date = last_month_end.strftime("%Y-%m-%d")
     start_date = last_month_start.strftime("%Y-%m-%d")
     
-    # Use Google Drive importer to ensure files are available
-    file_requests = [
-        {'type': 'single_date', 'date': start_date},
-        {'type': 'single_date', 'date': end_date}
-    ]
+    # Find the required CSV files in local folder
+    file_start = find_csv_file_by_date(start_date)
+    file_end = find_csv_file_by_date(end_date)
     
-    result = ensure_files_available(file_requests)
-    if not result['success']:
-        error_msg = "Required files not available for the selected month range."
-        if result['errors']:
-            error_msg += f" Errors: {'; '.join(result['errors'])}"
-        return {"error": error_msg}
+    if not file_start:
+        return {"error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
     
-    if len(result['files']) < 2:
-        return {"error": f"Could not download both required files. Only got {len(result['files'])} files."}
-    
-    # Use the actual downloaded file paths
-    file_start = result['files'][0] if start_date in result['files'][0] else result['files'][1]
-    file_end = result['files'][1] if end_date in result['files'][1] else result['files'][0]
-    
-    # Verify files exist
-    if not os.path.exists(file_start) or not os.path.exists(file_end):
-        return {"error": "Downloaded files are not accessible."}
+    if not file_end:
+        return {"error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
     
     return standardize_range_formats(file_start, file_end)
 
 def get_last_year_range():
+    """Get chart data for last year using local CSV files"""
     today = datetime.today().date()
     last_year = today.year - 1
     last_year_start = datetime(last_year, 1, 1).date()
@@ -215,59 +221,32 @@ def get_last_year_range():
     end_date = last_year_end.strftime("%Y-%m-%d")
     start_date = last_year_start.strftime("%Y-%m-%d")
     
-    # Use Google Drive importer to ensure files are available
-    file_requests = [
-        {'type': 'single_date', 'date': start_date},
-        {'type': 'single_date', 'date': end_date}
-    ]
+    # Find the required CSV files in local folder
+    file_start = find_csv_file_by_date(start_date)
+    file_end = find_csv_file_by_date(end_date)
     
-    result = ensure_files_available(file_requests)
-    if not result['success']:
-        error_msg = "Required files not available for the selected year range."
-        if result['errors']:
-            error_msg += f" Errors: {'; '.join(result['errors'])}"
-        return {"error": error_msg}
+    if not file_start:
+        return {"error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
     
-    if len(result['files']) < 2:
-        return {"error": f"Could not download both required files. Only got {len(result['files'])} files."}
-    
-    # Use the actual downloaded file paths
-    file_start = result['files'][0] if start_date in result['files'][0] else result['files'][1]
-    file_end = result['files'][1] if end_date in result['files'][1] else result['files'][0]
-    
-    # Verify files exist
-    if not os.path.exists(file_start) or not os.path.exists(file_end):
-        return {"error": "Downloaded files are not accessible."}
+    if not file_end:
+        return {"error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
     
     return standardize_range_formats(file_start, file_end)
 
 def get_chart_data_for_range(start_date, end_date):
-    # Use Google Drive importer to ensure files are available
-    file_requests = [
-        {'type': 'single_date', 'date': start_date.strftime("%Y-%m-%d")},
-        {'type': 'single_date', 'date': end_date.strftime("%Y-%m-%d")}
-    ]
-    
-    result = ensure_files_available(file_requests)
-    if not result['success']:
-        error_msg = "Required files not available for the selected range."
-        if result['errors']:
-            error_msg += f" Errors: {'; '.join(result['errors'])}"
-        return {"error": error_msg}
-
-    if len(result['files']) < 2:
-        return {"error": f"Could not download both required files. Only got {len(result['files'])} files."}
-
-    # Use the actual downloaded file paths
+    """Get chart data for a custom date range using local CSV files"""
+    # Find the required CSV files in local folder
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
     
-    file_start = result['files'][0] if start_date_str in result['files'][0] else result['files'][1]
-    file_end = result['files'][1] if end_date_str in result['files'][1] else result['files'][0]
-
-    # Verify files exist
-    if not os.path.exists(file_start) or not os.path.exists(file_end):
-        return {"error": "Downloaded files are not accessible."}
+    file_start = find_csv_file_by_date(start_date_str)
+    file_end = find_csv_file_by_date(end_date_str)
+    
+    if not file_start:
+        return {"error": f"Start date file not found for {start_date_str}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
+    
+    if not file_end:
+        return {"error": f"End date file not found for {end_date_str}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
 
     return standardize_range_formats(file_start, file_end)
 
@@ -547,110 +526,121 @@ def progress_stream():
             yield f"data: {message}\n\n"
     return Response(event_stream(), mimetype="text/event-stream")
 
-@app.route('/drive_status')
-def drive_status():
-    """Check Google Drive connection and list available files"""
+@app.route('/local_status')
+def local_status():
+    """Check local file status and list available CSV files"""
     try:
-        from Google_Drive_importer import test_drive_connection, list_all_available_files, get_available_dates
+        csv_files = get_csv_files_from_folder()
         
-        # Test connection
-        success, message = test_drive_connection()
-        
-        if success:
-            # Get file information
-            file_info = list_all_available_files()
-            available_dates = get_available_dates()
+        if csv_files:
+            # Extract dates from filenames
+            available_dates = []
+            for file in csv_files:
+                filename = os.path.basename(file)
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                if date_match:
+                    available_dates.append(date_match.group(1))
+            
+            available_dates.sort(reverse=True)  # Most recent first
             
             return jsonify({
                 'success': True,
-                'connection_status': message,
-                'drive_files_count': file_info['drive_count'],
-                'local_files_count': file_info['local_count'],
-                'drive_files': file_info['drive_files'][:10],  # Show first 10 files
+                'connection_status': 'Local files available',
+                'local_files_count': len(csv_files),
+                'csv_files': [os.path.basename(f) for f in csv_files[:10]],  # Show first 10 files
                 'available_dates': available_dates[:10],  # Show first 10 dates
-                'latest_date': available_dates[0] if available_dates else None
+                'latest_date': available_dates[0] if available_dates else None,
+                'data_folder': DATA_FOLDER
             })
         else:
             return jsonify({
                 'success': False,
-                'error': message
+                'error': f'No CSV files found in {DATA_FOLDER} folder'
             })
             
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': f"Error checking drive status: {str(e)}"
+            'error': f"Error checking local files: {str(e)}"
         })
 
-@app.route('/sync_files')
-def sync_files():
-    """Sync recent files from Google Drive"""
+@app.route('/refresh_files')
+def refresh_files():
+    """Refresh the list of available local CSV files"""
     try:
-        from Google_Drive_importer import sync_latest_files
+        csv_files = get_csv_files_from_folder()
         
-        days_back = request.args.get('days', 7, type=int)
-        results = sync_latest_files(days_back)
-        
-        successful_files = [r for r in results if r['success']]
-        failed_files = [r for r in results if not r['success']]
-        
-        return jsonify({
-            'success': True,
-            'total_requested': len(results),
-            'successful': len(successful_files),
-            'failed': len(failed_files),
-            'successful_files': [r['path'] for r in successful_files],
-            'failed_dates': [r['date'] for r in failed_files],
-            'messages': [r['message'] for r in results]
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f"Error syncing files: {str(e)}"
-        })
-
-@app.route('/clear_cache')
-def clear_cache():
-    """Manually clear the local file cache"""
-    try:
-        if os.path.exists(DATA_FOLDER):
-            files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
-            file_count = len(files)
-            
-            # Remove only CSV files, keep the folder
-            for file in files:
-                file_path = os.path.join(DATA_FOLDER, file)
-                os.remove(file_path)
+        if csv_files:
+            # Extract dates and file info
+            file_info = []
+            for file_path in csv_files:
+                filename = os.path.basename(file_path)
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                file_size = os.path.getsize(file_path)
+                file_modified = datetime.fromtimestamp(os.path.getmtime(file_path))
+                
+                file_info.append({
+                    'filename': filename,
+                    'date': date_match.group(1) if date_match else 'unknown',
+                    'size_bytes': file_size,
+                    'modified': file_modified.strftime("%Y-%m-%d %H:%M:%S")
+                })
             
             return jsonify({
                 'success': True,
-                'message': f"Successfully cleared cache. Removed {file_count} files."
+                'total_files': len(csv_files),
+                'files': file_info,
+                'message': f"Found {len(csv_files)} CSV files in local folder"
             })
         else:
             return jsonify({
+                'success': False,
+                'total_files': 0,
+                'files': [],
+                'message': f"No CSV files found in {DATA_FOLDER} folder"
+            })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f"Error refreshing files: {str(e)}"
+        })
+
+@app.route('/list_files')
+def list_files():
+    """List all CSV files in the local folder"""
+    try:
+        if os.path.exists(DATA_FOLDER):
+            csv_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
+            file_count = len(csv_files)
+            
+            # Sort files by name (which includes date)
+            csv_files.sort(reverse=True)
+            
+            return jsonify({
                 'success': True,
-                'message': "Cache folder was already empty."
+                'message': f"Found {file_count} CSV files in local folder.",
+                'files': csv_files,
+                'folder_path': os.path.abspath(DATA_FOLDER)
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f"Data folder '{DATA_FOLDER}' does not exist.",
+                'files': [],
+                'folder_path': os.path.abspath(DATA_FOLDER)
             })
     except Exception as e:
         return jsonify({
             'success': False,
-            'error': f"Error clearing cache: {str(e)}"
+            'error': f"Error listing files: {str(e)}"
         })
 
 def cleanup_on_exit():
-    """Clean up downloaded files when the app exits"""
+    """Clean up function for graceful shutdown"""
     try:
-        if os.path.exists(DATA_FOLDER):
-            files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
-            if files:
-                print(f"\nCleaning up {len(files)} temporary files in {DATA_FOLDER}...")
-                for file in files:
-                    file_path = os.path.join(DATA_FOLDER, file)
-                    os.remove(file_path)
-                print("Cleanup complete!")
-            else:
-                print(f"\nNo temporary files to clean up in {DATA_FOLDER}")
+        print(f"\nShutting down IBU Dashboard...")
+        print("No temporary files to clean up (using local folder)")
     except Exception as e:
         print(f"Error during cleanup: {str(e)}")
 
@@ -663,107 +653,6 @@ def signal_handler(sig, frame):
 # Register cleanup functions
 atexit.register(cleanup_on_exit)
 signal.signal(signal.SIGINT, signal_handler)
-
-@app.route('/check_drive_connection')
-def check_drive_connection():
-    """Check Google Drive connection status by testing folder access"""
-    try:
-        # Import the Google Drive test function
-        from Google_Drive_importer import test_drive_connection
-        
-        # Simple connection test - just check if we can list files in the folder
-        success, message = test_drive_connection()
-        
-        if success:
-            return jsonify({
-                "connected": True,
-                "message": message
-            })
-        else:
-            return jsonify({
-                "connected": False,
-                "message": message
-            })
-            
-    except ImportError:
-        return jsonify({
-            "connected": False,
-            "message": "Google Drive module not found"
-        })
-    except Exception as e:
-        print(f"Google Drive connection error: {str(e)}")
-        return jsonify({
-            "connected": False,
-            "error": str(e),
-            "message": "Google Drive connection failed"
-        })
-
-@app.route('/test_connection')
-def test_connection_page():
-    """Serve a test page for debugging connection issues"""
-    return '''<!DOCTYPE html>
-<html>
-<head>
-    <title>Connection Test</title>
-</head>
-<body>
-    <h1>Google Drive Connection Test</h1>
-    <div id="result">Testing...</div>
-    <button onclick="testConnection()">Test Again</button>
-    
-    <script>
-        async function testConnection() {
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = 'Testing...';
-            
-            try {
-                console.log('Making request to /check_drive_connection');
-                const response = await fetch('/check_drive_connection');
-                console.log('Response:', response);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('Data:', data);
-                    
-                    resultDiv.innerHTML = `
-                        <h2>Response received:</h2>
-                        <p><strong>Connected:</strong> ${data.connected}</p>
-                        <p><strong>Message:</strong> ${data.message}</p>
-                        <p><strong>Raw JSON:</strong> ${JSON.stringify(data)}</p>
-                    `;
-                } else {
-                    resultDiv.innerHTML = `<p style="color: red;">HTTP Error: ${response.status} ${response.statusText}</p>`;
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
-            }
-        }
-        
-        // Test on load
-        testConnection();
-    </script>
-</body>
-</html>'''
-
-@app.route('/warmup_drive')
-def warmup_drive():
-    """Warmup Google Drive connection"""
-    try:
-        from Google_Drive_importer import authenticate_drive_api
-        
-        # Initialize the drive service
-        drive_service = authenticate_drive_api()
-        
-        return jsonify({
-            "success": True,
-            "message": "Google Drive service initialized"
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        })
 
 @app.route('/get_simple_stats')
 def get_simple_stats():
@@ -815,6 +704,53 @@ def get_simple_stats():
                 "active_members": 0,
                 "top_performers": []
             }
+        })
+
+@app.route('/get_latest_file_info')
+def get_latest_file_info():
+    """Get information about the latest CSV file for real-time updates"""
+    try:
+        file_path, date_str, file_timestamp = get_latest_csv_file()
+        
+        if not file_path or not date_str:
+            return jsonify({
+                "success": False,
+                "message": "No CSV files found",
+                "latest_file": "No data",
+                "latest_date": "No data",
+                "time_ago": "No recent data",
+                "file_count": 0
+            })
+        
+        # Format the information
+        try:
+            latest_file = os.path.basename(file_path)
+            latest_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%B %d, %Y")
+            time_ago = get_time_ago_string(file_timestamp)
+        except Exception:
+            latest_file = os.path.basename(file_path) if file_path else "Unknown"
+            latest_date = date_str
+            time_ago = "Recently"
+        
+        # Get total file count
+        csv_files = get_csv_files_from_folder()
+        
+        return jsonify({
+            "success": True,
+            "latest_file": latest_file,
+            "latest_date": latest_date,
+            "time_ago": time_ago,
+            "file_count": len(csv_files),
+            "file_path": file_path,
+            "date_str": date_str
+        })
+        
+    except Exception as e:
+        print(f"Error getting latest file info: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "message": "Error retrieving file information"
         })
 
 # Flask startup

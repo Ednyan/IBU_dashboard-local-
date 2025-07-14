@@ -390,84 +390,6 @@
       font-weight: 500;
     }
 
-    /* Google Drive connection status */
-    .connection-status {
-      position: fixed;
-      top: 2rem;
-      right: 2rem;
-      z-index: 200;
-      opacity: 0;
-      transform: translateY(-10px);
-      transition: all 0.5s ease-out;
-    }
-
-    .connection-status.loaded {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .status-indicator {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.8rem 1.2rem;
-      background: rgba(42, 42, 42, 0.9);
-      border-radius: 12px;
-      backdrop-filter: blur(15px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      font-family: 'Inter', sans-serif;
-      font-size: 0.85rem;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-      transition: all 0.3s ease;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .status-indicator:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
-      background: rgba(52, 52, 52, 0.95);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    .status-indicator:active {
-      transform: translateY(0);
-      box-shadow: 0 2px 15px rgba(0, 0, 0, 0.3);
-    }
-
-    .status-indicator.checking .status-icon {
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    .status-indicator.success {
-      border-color: rgba(76, 175, 80, 0.4);
-    }
-
-    .status-indicator.success .status-icon {
-      color: #4CAF50;
-    }
-
-    .status-indicator.success .status-text {
-      color: #4CAF50;
-    }
-
-    .status-indicator.error {
-      border-color: rgba(244, 67, 54, 0.4);
-    }
-
-    .status-indicator.error .status-icon {
-      color: #f44336;
-    }
-
-    .status-indicator.error .status-text {
-      color: #f44336;
-    }
-
     /* Hide stats panel when text panel is open */
     .text-panel[style*="translateX(0)"] ~ .stats-panel,
     .text-panel[style*="opacity: 1"] ~ .stats-panel {
@@ -544,11 +466,6 @@
         transform: none;
       }
       
-      .connection-status {
-        top: 1rem;
-        right: 1rem;
-      }
-      
       .live-stats {
         min-width: auto;
         padding: 1rem;
@@ -587,6 +504,21 @@
     @keyframes backgroundShift {
       0%, 100% { opacity: 0.3; }
       50% { opacity: 0.6; }
+    }
+
+    @keyframes pulse {
+      0% { 
+        transform: scale(1);
+        color: rgba(224, 97, 80, 1);
+      }
+      50% { 
+        transform: scale(1.02);
+        color: rgba(224, 97, 80, 0.8);
+      }
+      100% { 
+        transform: scale(1);
+        color: rgba(224, 97, 80, 1);
+      }
     }
 
 
