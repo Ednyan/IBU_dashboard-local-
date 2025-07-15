@@ -41,7 +41,7 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 ## 🎭 Screenshots
 
 ### Landing Page
-![Landing Page](static/IBU_Dashboard_landing_page)
+![Landing Page](static/IBU_Dashboard_landing_page.png)
 *Modern, animated landing page with live statistics panel*
 
 ### Team Analytics
