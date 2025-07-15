@@ -3,7 +3,6 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-2.3+-green.svg)](https://flask.palletsprojects.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Render](https://img.shields.io/badge/Deploy-Render-purple.svg)](https://render.com)
 
 > **A modern, cinematic web dashboard for tracking SheepIt Render Farm team performance and statistics.**
 
@@ -32,20 +31,18 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 
 ### 🎨 **Modern User Experience**
 - **Cinematic Landing Page**: Animated particles and smooth transitions
-- **Responsive Design**: Works perfectly on desktop, tablet, and mobile
 - **Interactive Visualizations**: Powered by Plotly for dynamic charts
 - **Real-time Updates**: Live connection status and data refresh
 
 ### 🔧 **Technical Features**
 - **Automated Data Collection**: Scrapes and processes team performance data
 - **Cloud Integration**: Secure Google Drive API integration
-- **Production Ready**: Environment variable configuration for secure deployment
 - **Scalable Architecture**: Built with Flask for easy hosting and maintenance
 
 ## 🎭 Screenshots
 
 ### Landing Page
-![Landing Page](static/IBU_SMILE_ICON.svg)
+![Landing Page](static/IBU_Dashboard_landing_page)
 *Modern, animated landing page with live statistics panel*
 
 ### Team Analytics
