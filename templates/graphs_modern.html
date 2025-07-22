@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>I.B.U TEAM DATA</title>
+  
+  <!-- jQuery and jQuery UI for custom datepicker -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/ui-lightness/jquery-ui.css">
+  
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
   <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='graphs_modern.css') }}">
@@ -39,16 +45,21 @@
           <label for="chartSelector" class="control-label">Choose chart:</label>
           <select id="chartSelector" class="modern-select">
             <option value="total">Total</option>
+            <option value="last_day">Last Day</option>
             <option value="last_week">Last Week</option>
             <option value="last_month">Last Month</option>
             <option value="last_year">Last Year</option>
             <option value="custom">Custom Date</option>
           </select>
+          <div id="dateRangeDisplay" class="date-range-display">
+            <span class="range-label">Showing:</span>
+            <span id="rangeText" class="range-text">Loading...</span>
+          </div>
         </div>
         
         <div class="date-controls" id="dateControls">
-          <input type="date" id="startDate" class="date-input" placeholder="Start Date" />
-          <input type="date" id="endDate" class="date-input" placeholder="End Date" />
+          <input type="text" id="startDate" class="date-input custom-datepicker" placeholder="Start Date" readonly />
+          <input type="text" id="endDate" class="date-input custom-datepicker" placeholder="End Date" readonly />
           <button id="applyCustomRange" class="apply-button">Apply Range</button>
         </div>
       </div>
@@ -161,6 +172,9 @@
         dateControls.classList.remove('active');
       }
       
+      // Update date range display
+      updateDateRangeDisplay(chartSelector.value);
+      
       Plotly.purge('pointsPieChart');
       if (!isCustom) {
         setTimeout(() => {
@@ -178,7 +192,169 @@
         showNotification("Please select both start and end dates.", "warning");
         return;
       }
+      
+      // Update date range display for custom dates
+      updateDateRangeDisplay("custom", from, to);
+      
       loadPieChart("custom", from, to);
+    });
+
+    // Date range display functionality
+    function updateDateRangeDisplay(chartType, startDate = null, endDate = null) {
+      const rangeDisplay = document.getElementById('dateRangeDisplay');
+      const rangeText = document.getElementById('rangeText');
+      
+      if (!rangeDisplay || !rangeText) return;
+      
+      rangeDisplay.className = 'date-range-display loading';
+      rangeText.textContent = 'Loading...';
+      
+      // Get the latest date for reference
+      fetch('/get_latest_file_info')
+        .then(response => response.json())
+        .then(data => {
+          let displayText = '';
+          
+          switch(chartType) {
+            case 'total':
+              if (data.success && data.date_str) {
+                const latestDate = new Date(data.date_str).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric'
+                });
+                displayText = `Latest data (${latestDate})`;
+              } else {
+                displayText = 'Latest available data';
+              }
+              break;
+              
+            case 'last_day':
+              if (data.success && data.date_str) {
+                // Calculate previous day for last day view
+                const latestDate = new Date(data.date_str);
+                const previousDate = new Date(latestDate);
+                previousDate.setDate(previousDate.getDate() - 1);
+                
+                const latest = latestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const previous = previousDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                
+                displayText = `${previous} → ${latest}`;
+              } else {
+                displayText = 'Last day comparison';
+              }
+              break;
+              
+            case 'custom':
+              if (startDate && endDate) {
+                const start = new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const end = new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                displayText = `${start} → ${end}`;
+              } else {
+                displayText = 'Custom range';
+              }
+              break;
+              
+            case 'last_week':
+              displayText = 'Previous week';
+              break;
+              
+            case 'last_month':
+              const today = new Date();
+              const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+              const monthName = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+              displayText = monthName;
+              break;
+              
+            case 'last_year':
+              const currentYear = new Date().getFullYear();
+              displayText = `Year ${currentYear - 1}`;
+              break;
+              
+            default:
+              displayText = 'Data range';
+          }
+          
+          rangeDisplay.className = 'date-range-display';
+          rangeText.textContent = displayText;
+        })
+        .catch(error => {
+          console.error('Error getting date info:', error);
+          rangeDisplay.className = 'date-range-display error';
+          rangeText.textContent = 'Date info unavailable';
+        });
+    }
+
+    // Custom datepicker initialization and available dates highlighting
+    let availableDates = [];
+
+    function initializeCustomDatepickers() {
+      // First, load available dates from the server
+      fetch('/get_available_dates')
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.available_dates) {
+            availableDates = data.available_dates;
+            console.log('Available dates loaded:', availableDates);
+            
+            // Initialize both datepickers
+            $('#startDate, #endDate').datepicker({
+              dateFormat: 'yy-mm-dd',
+              changeMonth: true,
+              changeYear: true,
+              showAnim: 'slideDown',
+              beforeShowDay: function(date) {
+                const dateString = $.datepicker.formatDate('yy-mm-dd', date);
+                const isAvailable = availableDates.includes(dateString);
+                const isWeekend = (date.getDay() === 0 || date.getDay() === 6);
+                
+                // Priority 1: CSV data available (green background)
+                if (isAvailable) {
+                  return [true, 'csv-data-available', 'CSV data available for this date'];
+                }
+                
+                // Priority 2: Weekend styling
+                if (isWeekend) {
+                  return [true, 'weekend-day', 'Weekend'];
+                }
+                
+                // Default: no special styling
+                return [true, '', ''];
+              },
+              onSelect: function(dateText, inst) {
+                console.log('Date selected:', dateText);
+                // Optional: Auto-trigger chart update for single date selections
+                // You can add logic here if needed
+              }
+            });
+
+            // Add click handlers to open datepickers
+            $('#startDate').on('click focus', function() {
+              $(this).datepicker('show');
+            });
+            
+            $('#endDate').on('click focus', function() {
+              $(this).datepicker('show');
+            });
+
+            console.log('Custom datepickers initialized successfully');
+          }
+        })
+        .catch(error => {
+          console.error('Error loading available dates:', error);
+          // Initialize basic datepickers even if we can't load available dates
+          $('#startDate, #endDate').datepicker({
+            dateFormat: 'yy-mm-dd',
+            changeMonth: true,
+            changeYear: true,
+            showAnim: 'slideDown'
+          });
+        });
+    }
+
+    // Call initialization after DOM is ready
+    $(document).ready(function() {
+      initializeCustomDatepickers();
     });
 
     // PRESERVE ORIGINAL CHART LOADING FUNCTION
@@ -431,6 +607,8 @@
       } else {
         if (chartSelector.value === "total") {
           console.log('Loading initial total chart...');
+          // Initialize date range display for total chart
+          updateDateRangeDisplay("total");
           setTimeout(() => {
             loadPieChart("total");
           }, 500);

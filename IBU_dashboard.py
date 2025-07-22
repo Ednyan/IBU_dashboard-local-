@@ -135,6 +135,38 @@ def get_time_ago_string(file_timestamp):
         print(f"Error calculating time ago: {e}")
         return "Recently"
 
+def get_last_day_data():
+    """Get chart data showing point differences for the last day (latest file vs previous day file)"""
+    try:
+        # Get the latest CSV file
+        latest_file_path, latest_date_str, _ = get_latest_csv_file()
+        
+        if not latest_file_path or not latest_date_str:
+            return {"error": "No CSV files found for last day calculation."}
+        
+        # Calculate the previous day
+        try:
+            latest_date = datetime.strptime(latest_date_str, "%Y-%m-%d").date()
+            previous_date = latest_date - timedelta(days=1)
+            previous_date_str = previous_date.strftime("%Y-%m-%d")
+        except ValueError:
+            return {"error": f"Invalid date format in latest file: {latest_date_str}"}
+        
+        # Find the CSV file for the previous day
+        previous_file_path = find_csv_file_by_date(previous_date_str)
+        
+        if not previous_file_path:
+            return {"error": f"Previous day file not found for {previous_date_str}. Cannot calculate last day difference without consecutive day data."}
+        
+        if not os.path.exists(latest_file_path) or not os.path.exists(previous_file_path):
+            return {"error": "Required CSV files not found for last day calculation."}
+        
+        # Use the existing standardize_range_formats function to calculate differences
+        return standardize_range_formats(previous_file_path, latest_file_path)
+        
+    except Exception as e:
+        return {"error": f"Error calculating last day data: {str(e)}"}
+
 def get_chart_total():
     """Get chart data from the latest CSV file in the local folder"""
     try:
@@ -457,7 +489,12 @@ def get_chart_data():
     start = request.args.get("start")
     end = request.args.get("end")
 
-    if chart_type == "last_week":
+    if chart_type == "last_day":
+        data = get_last_day_data()
+        if not data or "error" in data:
+            return jsonify({"error": "Not enough data available for the last day."}), 400
+        return jsonify(data)
+    elif chart_type == "last_week":
         data = get_last_week_range()
         if not data or "error" in data:
             return jsonify({"error": "Not enough data available for the selected range."}), 400
@@ -562,6 +599,43 @@ def local_status():
         return jsonify({
             'success': False,
             'error': f"Error checking local files: {str(e)}"
+        })
+
+@app.route('/get_available_dates')
+def get_available_dates():
+    """Get available dates from CSV files for datepicker highlighting"""
+    try:
+        csv_files = get_csv_files_from_folder()
+        
+        if csv_files:
+            # Extract dates from filenames
+            available_dates = []
+            for file in csv_files:
+                filename = os.path.basename(file)
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                if date_match:
+                    available_dates.append(date_match.group(1))
+            
+            available_dates.sort(reverse=True)  # Most recent first
+            
+            return jsonify({
+                'success': True,
+                'available_dates': available_dates,
+                'count': len(available_dates),
+                'latest_date': available_dates[0] if available_dates else None
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'available_dates': [],
+                'error': f'No CSV files found in {DATA_FOLDER} folder'
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'available_dates': [],
+            'error': f"Error getting available dates: {str(e)}"
         })
 
 @app.route('/refresh_files')
