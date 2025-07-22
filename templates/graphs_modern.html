@@ -256,12 +256,30 @@
               break;
               
             case 'last_week':
-              displayText = 'Previous week';
+              const todayForWeek = new Date();
+              const currentDay = todayForWeek.getDay(); // 0 = Sunday, 1 = Monday, etc.
+              const daysToLastMonday = currentDay === 0 ? 13 : currentDay + 6; // Adjust for Sunday = 0
+              
+              const lastMonday = new Date(todayForWeek);
+              lastMonday.setDate(todayForWeek.getDate() - daysToLastMonday);
+              
+              const lastSunday = new Date(lastMonday);
+              lastSunday.setDate(lastMonday.getDate() + 6);
+              
+              // Calculate week number
+              const startOfYear = new Date(lastMonday.getFullYear(), 0, 1);
+              const daysSinceStart = Math.floor((lastMonday - startOfYear) / (24 * 60 * 60 * 1000));
+              const weekNumber = Math.ceil((daysSinceStart + startOfYear.getDay() + 1) / 7);
+              
+              const mondayStr = lastMonday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              const sundayStr = lastSunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              
+              displayText = `${mondayStr} → ${sundayStr} (CW${weekNumber})`;
               break;
               
             case 'last_month':
-              const today = new Date();
-              const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+              const todayForMonth = new Date();
+              const lastMonth = new Date(todayForMonth.getFullYear(), todayForMonth.getMonth() - 1, 1);
               const monthName = lastMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
               displayText = monthName;
               break;
