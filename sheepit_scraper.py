@@ -4,17 +4,21 @@ import csv
 import os
 from datetime import datetime
 import hashlib
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configuration
-SCRAPED_TEAM_INFO_FOLDER = "Scraped_Team_Info"
+SCRAPED_TEAM_INFO_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
 
 # SheepIt URLs
 LOGIN_URL = "https://www.sheepit-renderfarm.com/user/authenticate"
-TEAM_URL = "https://www.sheepit-renderfarm.com/team/2109"
+TEAM_URL = os.getenv("SHEEPIT_TEAM_URL", "https://www.sheepit-renderfarm.com/team/2109")
 
-# Login credentials
-USERNAME = "username_here"  # Replace with your SheepIt username
-PASSWORD = "password_here"  # Replace with your SheepIt password
+# Login credentials from environment variables
+USERNAME = os.getenv("SHEEPIT_USERNAME", "your_username_here")
+PASSWORD = os.getenv("SHEEPIT_PASSWORD", "your_password_here")
 
 def name_to_color(name):
     """Generate a consistent color for a team member name"""
@@ -120,12 +124,18 @@ def save_team_data_to_csv(team_data):
         # Write CSV file
         print(f"💾 Saving data to: {csv_filepath}")
         with open(csv_filepath, 'w', newline='', encoding='utf-8') as csvfile:
-            # Use simplified headers that match the dashboard expectations
+            # Use the full format that matches existing files for probation tracking
             writer = csv.writer(csvfile)
-            writer.writerow(["name", "points"])  # Simple format for dashboard compatibility
+            writer.writerow(["Date", "Rank", "Member", "Points", "Joined Date"])
             
             for entry in team_data:
-                writer.writerow([entry["name"], entry["points"]])
+                writer.writerow([
+                    timestamp_str,  # Date
+                    entry["rank"],  # Rank
+                    entry["name"],  # Member
+                    entry["points"],  # Points
+                    entry["joined_date"]  # Joined Date
+                ])
         
         print(f"✅ Successfully saved {len(team_data)} records to {csv_filename}")
         return csv_filepath

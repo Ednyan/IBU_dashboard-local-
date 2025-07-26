@@ -1,0 +1,21 @@
+# I.B.U Dashboard Update History
+# Format: VERSION|DATE|TITLE|FEATURES (separated by semicolons)
+# Use emojis for visual appeal!
+
+Current v2.3|July 26, 2025|Data Export & Download System|📥 Interactive CSV download with date range selection;📅 Custom datepicker modal with available data highlighting;
+
+v2.2|July 26, 2025|Member Probation Tracking & Security System|✨ Complete probation tracking with milestone validation;📊 Post-probation compliance monitoring;🎯 Interactive member filtering system;🎨 Enhanced horizontal navigation design;📧 Automated email notification system for probation failures;🎯 Anti-spam CSV-triggered notifications with daily limits;
+
+v2.1|July 22, 2025|Custom Datepicker Enhancement|📅 jQuery UI datepicker with CSV highlighting;🎨 Professional color scheme redesign;📱 Responsive navigation improvements;⚡ Enhanced chart performance
+
+v2.0.2|July 15, 2025|Server Migration & Hosting|🚀 IBU Dashboard migrated to KoolKid6958 server;🌐 Improved server performance and reliability;📡 Enhanced data delivery speed
+
+v2.0.1|July 05, 2025|SVG Font Optimization|🔤 Embedded fonts directly in SVG files;⚡ Faster loading times for logos and graphics;📱 Improved cross-platform compatibility
+
+v2.0|July 04, 2025|Data Visualization Enhancement & UI Overhaul|📊 Interactive pie charts with Plotly.js;📈 Custom date range selection;🔄 Automatic data refresh system;📱 Mobile-responsive design;🎨 Complete UI redesign
+
+v1.0|July 01, 2025|Initial Release|🚀 Basic team data scraping functionality;📊 Simple statistics display and tracking;💾 Local CSV file management system;🎯 Core dashboard functionality
+
+# Add new updates above this line
+# Example format:
+# v2.3|August 1, 2025|New Feature Update|🚀 Amazing new feature;🎯 Another cool feature;💡 Yet another feature

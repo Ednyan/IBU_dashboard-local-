@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, jsonify, Response
+from flask import Flask, request, render_template, jsonify, Response, session, redirect, url_for, send_file
 from datetime import datetime, timedelta
 import pandas as pd
 import os
@@ -10,6 +10,21 @@ import signal
 import atexit
 import glob
 import re
+import zipfile
+import io
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Import notification service
+try:
+    from notification_service import notification_service
+    NOTIFICATIONS_ENABLED = True
+    print("✅ Email notifications enabled")
+except ImportError as e:
+    NOTIFICATIONS_ENABLED = False
+    print(f"⚠️ Email notifications disabled: {e}")
 
 # Use local data folder
 DATA_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
@@ -459,6 +474,12 @@ def get_custom_text(values, labels):
 
 app = Flask(__name__) #. .venv/bin/activate
 
+# Configure Flask session
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'ibu-dashboard-secret-key-change-in-production')
+
+# Admin password configuration
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default password - change in .env
+
 @app.route('/')
 def index():
     file_path, date_str, file_timestamp = get_latest_csv_file()
@@ -826,6 +847,852 @@ def get_latest_file_info():
             "error": str(e),
             "message": "Error retrieving file information"
         })
+
+@app.route('/get_updates')
+def get_updates():
+    """Read update history from updates.txt file"""
+    try:
+        updates_file = os.path.join('static', 'updates.txt')
+        
+        if not os.path.exists(updates_file):
+            return jsonify({
+                "success": False,
+                "error": "Updates file not found",
+                "updates": []
+            })
+        
+        updates = []
+        
+        with open(updates_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip comments and empty lines
+            if not line or line.startswith('#'):
+                continue
+            
+            try:
+                # Parse format: VERSION|DATE|TITLE|FEATURES (semicolon separated)
+                parts = line.split('|')
+                if len(parts) >= 4:
+                    version = parts[0].strip()
+                    date = parts[1].strip()
+                    title = parts[2].strip()
+                    features_text = parts[3].strip()
+                    
+                    # Split features by semicolon
+                    features = [f.strip() for f in features_text.split(';') if f.strip()]
+                    
+                    update_item = {
+                        "version": version,
+                        "date": date,
+                        "title": title,
+                        "features": features,
+                        "is_current": version.lower().startswith("current")
+                    }
+                    
+                    updates.append(update_item)
+                    
+            except Exception as e:
+                print(f"Error parsing update line '{line}': {e}")
+                continue
+        
+        return jsonify({
+            "success": True,
+            "updates": updates
+        })
+        
+    except Exception as e:
+        print(f"Error reading updates file: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "updates": []
+        })
+
+def parse_joined_date(joined_date_str):
+    """Parse the joined date string to datetime object"""
+    try:
+        # Handle format like "December 19th, 2023"
+        # Remove ordinal suffixes (st, nd, rd, th)
+        cleaned_date = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', joined_date_str)
+        return datetime.strptime(cleaned_date, "%B %d, %Y")
+    except Exception as e:
+        print(f"Error parsing date '{joined_date_str}': {e}")
+        return None
+
+def get_member_probation_status():
+    """Calculate probation status for all members"""
+    try:
+        # Get all CSV files to track progress over time
+        csv_files = get_csv_files_from_folder()
+        if not csv_files:
+            return {"error": "No CSV files found"}
+        
+        # Get current date for calculations
+        current_date = datetime.now()
+        
+        # Load the latest CSV to get current member list
+        latest_file = csv_files[0]
+        latest_df = pd.read_csv(latest_file)
+        
+        # Clean column names first
+        latest_df.columns = latest_df.columns.str.strip()
+        
+        # Store original column names for debugging
+        original_columns = list(latest_df.columns)
+        print(f"Original columns in latest file: {original_columns}")
+        
+        # Apply standard renames but preserve other columns
+        column_renames = {}
+        if "name" in latest_df.columns:
+            column_renames["name"] = "Member"
+        if "points" in latest_df.columns:
+            column_renames["points"] = "Points"
+        
+        if column_renames:
+            latest_df = latest_df.rename(columns=column_renames)
+        
+        print(f"Columns after rename: {list(latest_df.columns)}")
+        
+        # Verify required columns exist
+        if "Member" not in latest_df.columns or "Points" not in latest_df.columns:
+            return {"error": f"Required columns (Member, Points) missing. Found columns: {list(latest_df.columns)}"}
+        
+        if "Joined Date" not in latest_df.columns:
+            return {"error": f"Joined Date column missing. Found columns: {list(latest_df.columns)}. Please ensure your CSV files contain member join date information."}
+        
+        members_status = []
+        
+        for _, member_row in latest_df.iterrows():
+            try:
+                member_name = member_row['Member']
+                joined_date_str = str(member_row['Joined Date']).strip('"')
+                current_points = int(member_row['Points'])
+                
+                # Parse joined date
+                joined_date = parse_joined_date(joined_date_str)
+                if not joined_date:
+                    continue
+                
+                # Calculate time since joining
+                days_since_joined = (current_date - joined_date).days
+                
+                # Define probation milestones
+                week_1_target = 250000  # 250k points
+                month_1_target = 1000000  # 1M points  
+                month_3_target = 3000000  # 3M points
+                
+                # Calculate milestone dates
+                week_1_date = joined_date + timedelta(days=7)
+                month_1_date = joined_date + timedelta(days=30)
+                month_3_date = joined_date + timedelta(days=90)
+                
+                # Track points at each milestone - use None to indicate no data found
+                week_1_points = None
+                month_1_points = None
+                month_3_points = current_points  # Current total
+                
+                # Go through historical data to find points at milestone dates
+                for csv_file in reversed(csv_files):  # Start from oldest
+                    try:
+                        # Extract date from filename
+                        filename = os.path.basename(csv_file)
+                        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                        if not date_match:
+                            continue
+                        
+                        file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
+                        
+                        # Skip files before the member joined
+                        if file_date < joined_date:
+                            continue
+                        
+                        # Load CSV and find member
+                        df = pd.read_csv(csv_file)
+                        
+                        # Clean column names first
+                        df.columns = df.columns.str.strip()
+                        
+                        # Apply standard renames but preserve other columns  
+                        column_renames = {}
+                        if "name" in df.columns:
+                            column_renames["name"] = "Member"
+                        if "points" in df.columns:
+                            column_renames["points"] = "Points"
+                        
+                        if column_renames:
+                            df = df.rename(columns=column_renames)
+                        
+                        # Skip if essential columns are missing
+                        if "Member" not in df.columns or "Points" not in df.columns:
+                            continue
+                        
+                        # Find member data
+                        member_data = df[df['Member'] == member_name]
+                        
+                        if member_data.empty:
+                            continue
+                        
+                        points_at_date = int(member_data.iloc[0]['Points'])
+                        
+                        # Record points at milestone dates (find closest date after milestone)
+                        if file_date >= week_1_date and week_1_points is None:
+                            week_1_points = points_at_date
+                        if file_date >= month_1_date and month_1_points is None:
+                            month_1_points = points_at_date
+                            
+                    except Exception as e:
+                        continue
+                
+                # Calculate remaining points needed first
+                week_1_remaining = max(0, week_1_target - current_points) if current_date < week_1_date else 0
+                month_1_remaining = max(0, month_1_target - current_points) if current_date < month_1_date else 0
+                month_3_remaining = max(0, month_3_target - current_points) if current_date < month_3_date else 0
+                
+                # Enhanced logic: check if milestone is passed
+                # A milestone is passed if:
+                # 1. The deadline has passed AND they had enough points at the deadline (historical data), OR
+                # 2. They currently have enough points (early achievement), OR
+                # 3. No historical data available but current points show achievement
+                # A milestone is failed ONLY if we have historical data showing they didn't meet the target
+                week_1_passed = None
+                if current_date >= week_1_date:
+                    # Deadline has passed
+                    if week_1_points is not None:
+                        # We have historical data - check if they met the target
+                        week_1_passed = week_1_points >= week_1_target
+                    else:
+                        # No historical data - can't determine failure, check current achievement
+                        week_1_passed = current_points >= week_1_target if current_points >= week_1_target else None
+                else:
+                    # Deadline hasn't passed - check if they already achieved it
+                    week_1_passed = current_points >= week_1_target if current_points >= week_1_target else None
+                
+                month_1_passed = None
+                if current_date >= month_1_date:
+                    # Deadline has passed
+                    if month_1_points is not None:
+                        # We have historical data - check if they met the target
+                        month_1_passed = month_1_points >= month_1_target
+                    else:
+                        # No historical data - can't determine failure, check current achievement
+                        month_1_passed = current_points >= month_1_target if current_points >= month_1_target else None
+                else:
+                    # Deadline hasn't passed - check if they already achieved it
+                    month_1_passed = current_points >= month_1_target if current_points >= month_1_target else None
+                
+                month_3_passed = None
+                if current_date >= month_3_date:
+                    # Deadline has passed - always use current points as we have that data
+                    month_3_passed = month_3_points >= month_3_target
+                else:
+                    # Deadline hasn't passed - check if they already achieved it
+                    month_3_passed = current_points >= month_3_target if current_points >= month_3_target else None
+                
+                # Determine overall probation status
+                probation_status = "in_progress"
+                
+                # Check if they completed all probation (passed all 3 milestones)
+                if week_1_passed == True and month_1_passed == True and month_3_passed == True:
+                    probation_status = "passed"
+                # Check if they failed any milestone (only if deadline has passed AND they failed)
+                elif current_date >= month_3_date and month_3_passed == False:
+                    probation_status = "failed"
+                elif current_date >= month_1_date and month_1_passed == False:
+                    probation_status = "failed"
+                elif current_date >= week_1_date and week_1_passed == False:
+                    probation_status = "failed"
+                
+                # Post-probation compliance tracking (only for members who passed probation)
+                post_probation_status = None
+                post_probation_periods = []
+                
+                if probation_status == "passed":
+                    # Calculate post-probation periods (90-day intervals starting after probation ends)
+                    probation_end_date = month_3_date  # Probation ends after 3 months
+                    
+                    # Check if enough time has passed to start post-probation tracking
+                    if current_date >= probation_end_date:
+                        # Calculate all 90-day periods since probation ended
+                        period_start = probation_end_date
+                        period_number = 1
+                        
+                        # Process all periods (completed and current active period)
+                        # Process all periods (completed and current active period)
+                        while period_start <= current_date:
+                            period_end = period_start + timedelta(days=90)
+                            is_current_period = current_date < period_end  # True if this is the ongoing period
+                            
+                            # Find points at start and end of this period
+                            points_at_start = 0
+                            points_at_end = 0
+                            
+                            # Look through historical data for points at period boundaries
+                            # We need EXACT dates for both boundaries, not closest approximations
+                            period_start_found = False
+                            period_end_found = False
+                            
+                            # Debug: print period info for current calculations
+                            print(f"Processing period {period_number} for {member_name}: {period_start.date()} to {period_end.date()}, current_period: {is_current_period}")
+                            
+                            for csv_file in csv_files:  # Check all files, not just reversed
+                                try:
+                                    filename = os.path.basename(csv_file)
+                                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                                    if not date_match:
+                                        continue
+                                    
+                                    file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
+                                    
+                                    # Check for EXACT match with period start date
+                                    if file_date.date() == period_start.date() and not period_start_found:
+                                        # Load CSV and find member for period start
+                                        df = pd.read_csv(csv_file)
+                                        df.columns = df.columns.str.strip()
+                                        
+                                        column_renames = {}
+                                        if "name" in df.columns:
+                                            column_renames["name"] = "Member"
+                                        if "points" in df.columns:
+                                            column_renames["points"] = "Points"
+                                        
+                                        if column_renames:
+                                            df = df.rename(columns=column_renames)
+                                        
+                                        if "Member" not in df.columns or "Points" not in df.columns:
+                                            continue
+                                        
+                                        member_data = df[df['Member'] == member_name]
+                                        if not member_data.empty:
+                                            points_at_start = int(member_data.iloc[0]['Points'])
+                                            period_start_found = True
+                                            print(f"Found period start data: {points_at_start} points on {file_date.date()}")
+                                    
+                                    # For current period, use current points instead of end date
+                                    if is_current_period:
+                                        # For ongoing period, use the latest available CSV file for current points
+                                        # Since current_date might not have a CSV, use the latest file
+                                        if csv_file == csv_files[0]:  # This is the latest/most recent file
+                                            df = pd.read_csv(csv_file)
+                                            df.columns = df.columns.str.strip()
+                                            
+                                            column_renames = {}
+                                            if "name" in df.columns:
+                                                column_renames["name"] = "Member"
+                                            if "points" in df.columns:
+                                                column_renames["points"] = "Points"
+                                            
+                                            if column_renames:
+                                                df = df.rename(columns=column_renames)
+                                            
+                                            if "Member" not in df.columns or "Points" not in df.columns:
+                                                continue
+                                            
+                                            member_data = df[df['Member'] == member_name]
+                                            if not member_data.empty:
+                                                points_at_end = int(member_data.iloc[0]['Points'])
+                                                period_end_found = True
+                                                print(f"Found current period end data: {points_at_end} points on {file_date.date()}")
+                                    else:
+                                        # Check for EXACT match with period end date (completed periods only)
+                                        if file_date.date() == period_end.date() and not period_end_found:
+                                            # Load CSV and find member for period end
+                                            df = pd.read_csv(csv_file)
+                                            df.columns = df.columns.str.strip()
+                                            
+                                            column_renames = {}
+                                            if "name" in df.columns:
+                                                column_renames["name"] = "Member"
+                                            if "points" in df.columns:
+                                                column_renames["points"] = "Points"
+                                            
+                                            if column_renames:
+                                                df = df.rename(columns=column_renames)
+                                            
+                                            if "Member" not in df.columns or "Points" not in df.columns:
+                                                continue
+                                            
+                                            member_data = df[df['Member'] == member_name]
+                                            if not member_data.empty:
+                                                points_at_end = int(member_data.iloc[0]['Points'])
+                                                period_end_found = True
+                                                print(f"Found period end data: {points_at_end} points on {file_date.date()}")
+                                    
+                                    # Stop searching if we found both boundary points
+                                    if period_start_found and (period_end_found or is_current_period):
+                                        break
+                                        
+                                except Exception as e:
+                                    continue
+                            
+                            # Calculate points earned in this period - ONLY if we have EXACT boundary data
+                            points_earned = 0
+                            target_points = 3000000  # 3M points per 90-day period
+                            
+                            # Determine if this period was successful
+                            # We REQUIRE exact data for BOTH boundaries to make any determination
+                            period_status = "insufficient_data"
+                            if period_start_found and period_end_found and points_at_start >= 0 and points_at_end >= 0:
+                                # Ensure we calculate period points correctly
+                                points_earned = max(0, points_at_end - points_at_start)
+                                
+                                # Debug output
+                                print(f"Period calculation for {member_name}: start={points_at_start}, end={points_at_end}, earned={points_earned}")
+                                
+                                # Sanity check: points earned in 90 days shouldn't exceed reasonable limits
+                                # If points_earned is unreasonably high, it suggests data corruption
+                                max_reasonable_points = 50000000  # 50M points in 90 days as sanity check
+                                if points_earned > max_reasonable_points:
+                                    # Data appears corrupted, mark as insufficient
+                                    print(f"WARNING: Unreasonably high points earned ({points_earned}), marking as insufficient data")
+                                    period_status = "insufficient_data"
+                                    points_earned = 0
+                                elif is_current_period:
+                                    # For current period, use time-based risk assessment (accounts for burst earning patterns)
+                                    days_elapsed = max(1, (current_date - period_start).days)  # Ensure at least 1 day
+                                    
+                                    if days_elapsed > 0 and days_elapsed <= 90:
+                                        if points_earned >= target_points:
+                                            period_status = "compliant"  # Already achieved target
+                                        elif days_elapsed >= 85 and points_earned < target_points:
+                                            period_status = "at_risk"   # Close to deadline without target
+                                        else:
+                                            period_status = "on_track"  # Still have time for burst activity
+                                    else:
+                                        period_status = "just_started"
+                                else:
+                                    # For completed periods, simple check
+                                    period_status = "compliant" if points_earned >= target_points else "non_compliant"
+                            
+                            # Store the period info with clear data availability indicators
+                            period_info = {
+                                "period_number": period_number,
+                                "start_date": period_start.strftime("%Y-%m-%d"),
+                                "end_date": period_end.strftime("%Y-%m-%d"),
+                                "points_at_start": points_at_start if period_start_found else None,
+                                "points_at_end": points_at_end if period_end_found else None,
+                                "points_earned": points_earned if period_start_found and period_end_found else None,
+                                "target_points": target_points,
+                                "status": period_status,
+                                "start_date_found": period_start_found,
+                                "end_date_found": period_end_found,
+                                "is_current_period": is_current_period
+                            }
+                            
+                            # Add projection data for current period
+                            if is_current_period and period_start_found and period_end_found and period_status != "insufficient_data":
+                                days_elapsed = max(1, (current_date - period_start).days)  # Ensure at least 1 day
+                                days_remaining = max(0, 90 - days_elapsed)
+                                
+                                # Additional validation
+                                if days_elapsed > 0 and days_elapsed <= 90 and points_earned >= 0:
+                                    daily_rate = points_earned / days_elapsed
+                                    projected_total = daily_rate * 90
+                                    remaining_needed = max(0, target_points - points_earned)
+                                    daily_needed = remaining_needed / max(1, days_remaining) if days_remaining > 0 else 0
+                                    
+                                    period_info.update({
+                                        "days_elapsed": days_elapsed,
+                                        "days_remaining": days_remaining,
+                                        "daily_rate": daily_rate,
+                                        "projected_total": projected_total,
+                                        "remaining_needed": remaining_needed,
+                                        "daily_needed": daily_needed
+                                    })
+                            
+                            post_probation_periods.append(period_info)
+                            
+                            # Move to next period (but break if current period is ongoing)
+                            if is_current_period:
+                                break
+                            period_start = period_end
+                            period_number += 1
+                        
+                        # Determine overall post-probation status and limit to 3 most recent periods
+                        if post_probation_periods:
+                            # Keep only the 3 most recent periods (latest periods have highest period_number)
+                            post_probation_periods = post_probation_periods[-3:]
+                            
+                            # Check if we have sufficient data for evaluation
+                            periods_with_data = [p for p in post_probation_periods if p["status"] != "insufficient_data"]
+                            
+                            # Separate current period from completed periods for status determination
+                            current_periods = [p for p in periods_with_data if p.get("is_current_period", False)]
+                            completed_periods = [p for p in periods_with_data if not p.get("is_current_period", False)]
+                            
+                            if len(periods_with_data) == 0:
+                                # No periods have sufficient data
+                                post_probation_status = "insufficient_data"
+                            else:
+                                # Check for any non-compliant completed periods
+                                non_compliant_completed = [p for p in completed_periods if p["status"] == "non_compliant"]
+                                
+                                if non_compliant_completed:
+                                    post_probation_status = "non_compliant"
+                                elif current_periods:
+                                    # Use current period status if no completed non-compliant periods
+                                    current_status = current_periods[0]["status"]  # Latest current period
+                                    if current_status == "compliant":
+                                        post_probation_status = "compliant"
+                                    elif current_status == "on_track":
+                                        post_probation_status = "on_track"
+                                    elif current_status == "at_risk":
+                                        post_probation_status = "at_risk"
+                                    else:
+                                        post_probation_status = "in_progress"
+                                elif completed_periods:
+                                    # Only completed periods, all compliant
+                                    post_probation_status = "compliant"
+                                else:
+                                    post_probation_status = "insufficient_data"
+                        else:
+                            post_probation_status = "insufficient_data"
+                    else:
+                        post_probation_status = "too_early"  # Not enough time passed since probation ended
+                
+                member_status = {
+                    "name": member_name,
+                    "joined_date": joined_date_str,
+                    "joined_date_parsed": joined_date.strftime("%Y-%m-%d"),
+                    "days_since_joined": days_since_joined,
+                    "current_points": current_points,
+                    "probation_status": probation_status,
+                    "post_probation_status": post_probation_status,
+                    "post_probation_periods": post_probation_periods,
+                    "milestones": {
+                        "week_1": {
+                            "target": week_1_target,
+                            "points_at_deadline": week_1_points,
+                            "has_historical_data": week_1_points is not None,
+                            "passed": week_1_passed,
+                            "deadline": week_1_date.strftime("%Y-%m-%d"),
+                            "remaining_points": week_1_remaining,
+                            "days_left": max(0, (week_1_date - current_date).days) if current_date < week_1_date else 0
+                        },
+                        "month_1": {
+                            "target": month_1_target,
+                            "points_at_deadline": month_1_points,
+                            "has_historical_data": month_1_points is not None,
+                            "passed": month_1_passed,
+                            "deadline": month_1_date.strftime("%Y-%m-%d"),
+                            "remaining_points": month_1_remaining,
+                            "days_left": max(0, (month_1_date - current_date).days) if current_date < month_1_date else 0
+                        },
+                        "month_3": {
+                            "target": month_3_target,
+                            "points_at_deadline": month_3_points,
+                            "has_historical_data": True,  # Always true since we use current points
+                            "passed": month_3_passed,
+                            "deadline": month_3_date.strftime("%Y-%m-%d"),
+                            "remaining_points": month_3_remaining,
+                            "days_left": max(0, (month_3_date - current_date).days) if current_date < month_3_date else 0
+                        }
+                    }
+                }
+                
+                members_status.append(member_status)
+                
+            except Exception as e:
+                continue
+        
+        # Sort by probation status priority and days since joined
+        status_priority = {"failed": 0, "in_progress": 1, "completed": 2}
+        members_status.sort(key=lambda x: (status_priority.get(x["probation_status"], 1), x["days_since_joined"]))
+        
+        return {"success": True, "members": members_status}
+        
+    except Exception as e:
+        print(f"Error calculating probation status: {str(e)}")
+        return {"error": str(e)}
+
+@app.route('/member_info')
+def member_info():
+    """Member info page with probation tracking"""
+    try:
+        # Get the latest file info for the header
+        file_path, date_str, file_timestamp = get_latest_csv_file()
+        
+        if file_path:
+            latest_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%B %d, %Y") if date_str else "Unknown"
+            time_ago = get_time_ago_string(file_timestamp)
+        else:
+            latest_date = "No data"
+            time_ago = "Unknown"
+        
+        return render_template('member_info.html', 
+                             latest_date=latest_date, 
+                             time_ago=time_ago)
+        
+    except Exception as e:
+        print(f"Error in member_info route: {str(e)}")
+        return render_template('member_info.html', 
+                             latest_date="Error", 
+                             time_ago="Error")
+
+@app.route('/get_probation_data')
+def get_probation_data():
+    """API endpoint to get probation status data"""
+    try:
+        probation_data = get_member_probation_status()
+        
+        # Check for probation failures and send notifications
+        if NOTIFICATIONS_ENABLED and probation_data and 'members' in probation_data:
+            try:
+                # Get the current CSV file for notification tracking
+                file_path, _, _ = get_latest_csv_file()
+                notification_service.check_and_notify_failures(probation_data['members'], file_path)
+            except Exception as e:
+                print(f"Error sending notifications: {e}")
+                # Don't fail the API call if notifications fail
+        
+        return jsonify(probation_data)
+    except Exception as e:
+        print(f"Error in get_probation_data: {str(e)}")
+        return jsonify({"error": str(e)})
+
+@app.route('/test_notification')
+def test_notification():
+    """Test endpoint to send a sample probation failure notification - requires authentication"""
+    # Check if user is authenticated
+    if not session.get('admin_authenticated'):
+        return jsonify({"error": "Authentication required"}), 401
+    
+    if not NOTIFICATIONS_ENABLED:
+        return jsonify({"error": "Notifications not enabled. Check notification_service.py import and email configuration."})
+    
+    try:
+        # Create a test member data
+        test_member = {
+            "name": "Test Member",
+            "joined_date": "2025-01-01",
+            "days_since_joined": 100,
+            "current_points": 250000,
+            "probation_status": "failed",
+            "milestones": {
+                "week_1": {
+                    "target": 500000,
+                    "passed": False,
+                    "points_at_deadline": 100000,
+                    "remaining_points": 400000,
+                    "days_left": 0
+                },
+                "month_1": {
+                    "target": 1500000,
+                    "passed": False,
+                    "points_at_deadline": 250000,
+                    "remaining_points": 1250000,
+                    "days_left": 0
+                },
+                "month_3": {
+                    "target": 3000000,
+                    "passed": None,
+                    "points_at_deadline": None,
+                    "remaining_points": 2750000,
+                    "days_left": 10
+                }
+            }
+        }
+        
+        # Send test notification
+        success = notification_service.notify_probation_failure(test_member)
+        
+        if success:
+            return jsonify({"message": "Test notification sent successfully!"})
+        else:
+            return jsonify({"error": "Failed to send test notification. Check email configuration."})
+            
+    except Exception as e:
+        return jsonify({"error": f"Error sending test notification: {str(e)}"})
+
+@app.route('/notification_admin')
+def notification_admin():
+    """Admin panel for notification system - requires authentication"""
+    # Check if user is authenticated
+    if not session.get('admin_authenticated'):
+        return redirect(url_for('admin_login'))
+    
+    return render_template('notification_admin.html')
+
+@app.route('/admin_login', methods=['GET', 'POST'])
+def admin_login():
+    """Admin login page"""
+    if request.method == 'POST':
+        password = request.form.get('password')
+        if password == ADMIN_PASSWORD:
+            session['admin_authenticated'] = True
+            return redirect(url_for('notification_admin'))
+        else:
+            return render_template('admin_login.html', error='Invalid password')
+    
+    return render_template('admin_login.html')
+
+@app.route('/admin_logout')
+def admin_logout():
+    """Admin logout"""
+    session.pop('admin_authenticated', None)
+    return redirect(url_for('admin_login'))
+
+@app.route('/notification_status')
+def notification_status():
+    """Get notification system status and configuration - requires authentication"""
+    # Check if user is authenticated
+    if not session.get('admin_authenticated'):
+        return jsonify({"error": "Authentication required"}), 401
+    
+    if not NOTIFICATIONS_ENABLED:
+        return jsonify({
+            "enabled": False,
+            "error": "Notification service not available"
+        })
+    
+    try:
+        config_status = {
+            "enabled": True,
+            "smtp_server": notification_service.smtp_server,
+            "smtp_port": notification_service.smtp_port,
+            "sender_email": notification_service.sender_email or "Not configured",
+            "sender_configured": bool(notification_service.sender_email),
+            "admin_emails_configured": len(notification_service.admin_emails),
+            "admin_emails": notification_service.admin_emails if notification_service.admin_emails else [],
+            "notification_history_count": len(notification_service.notification_history)
+        }
+        return jsonify(config_status)
+    except Exception as e:
+        return jsonify({
+            "enabled": False,
+            "error": str(e)
+        })
+
+@app.route('/api/file_count')
+def get_file_count():
+    """Get count of CSV files available in the specified date range"""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if not start_date or not end_date:
+            return jsonify({"error": "Both start_date and end_date are required"}), 400
+        
+        # Parse dates
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+        
+        if start_dt > end_dt:
+            return jsonify({"error": "Start date cannot be after end date"}), 400
+        
+        # Check if the data folder exists
+        if not os.path.exists(DATA_FOLDER):
+            return jsonify({"error": "Data folder not found"}), 404
+        
+        # Get all CSV files in the data folder
+        csv_files = glob.glob(os.path.join(DATA_FOLDER, "*.csv"))
+        
+        # Filter files based on date range
+        filtered_files = []
+        for csv_file in csv_files:
+            filename = os.path.basename(csv_file)
+            # Extract date from filename (format: sheepit_team_points_YYYY-MM-DD.csv)
+            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+            if date_match:
+                file_date_str = date_match.group(1)
+                try:
+                    file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
+                    if start_dt <= file_date <= end_dt:
+                        filtered_files.append(csv_file)
+                except ValueError:
+                    continue
+        
+        return jsonify({
+            "file_count": len(filtered_files),
+            "total_files": len(csv_files)
+        })
+        
+    except Exception as e:
+        print(f"Error getting file count: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/download_csv_files')
+def download_csv_files():
+    """Download CSV files from the Scraped_Team_Info folder as a ZIP archive with optional date filtering"""
+    try:
+        # Get date range parameters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Check if the data folder exists
+        if not os.path.exists(DATA_FOLDER):
+            return jsonify({"error": "Data folder not found"}), 404
+        
+        # Get all CSV files in the data folder
+        csv_files = glob.glob(os.path.join(DATA_FOLDER, "*.csv"))
+        
+        if not csv_files:
+            return jsonify({"error": "No CSV files found in data folder"}), 404
+        
+        # Filter files based on date range if provided
+        filtered_files = csv_files
+        if start_date and end_date:
+            try:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                
+                filtered_files = []
+                for csv_file in csv_files:
+                    filename = os.path.basename(csv_file)
+                    # Extract date from filename (format: sheepit_team_points_YYYY-MM-DD.csv)
+                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                    if date_match:
+                        file_date_str = date_match.group(1)
+                        try:
+                            file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
+                            if start_dt <= file_date <= end_dt:
+                                filtered_files.append(csv_file)
+                        except ValueError:
+                            continue
+                
+                if not filtered_files:
+                    return jsonify({"error": "No CSV files found in the specified date range"}), 404
+                    
+            except ValueError:
+                return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+        
+        # Create a ZIP file in memory
+        memory_file = io.BytesIO()
+        
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for csv_file in filtered_files:
+                # Get just the filename (not the full path)
+                filename = os.path.basename(csv_file)
+                # Add file to ZIP
+                zf.write(csv_file, filename)
+        
+        memory_file.seek(0)
+        
+        # Generate filename based on date range or timestamp
+        if start_date and end_date:
+            start_formatted = start_date.replace('-', '')
+            end_formatted = end_date.replace('-', '')
+            zip_filename = f"IBU_Team_Data_{start_formatted}_to_{end_formatted}.zip"
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            zip_filename = f"IBU_Team_Data_{timestamp}.zip"
+        
+        return send_file(
+            memory_file,
+            as_attachment=True,
+            download_name=zip_filename,
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        print(f"Error creating CSV download: {str(e)}")
+        return jsonify({"error": f"Failed to create download: {str(e)}"}), 500
 
 # Flask startup
 if __name__ == "__main__":

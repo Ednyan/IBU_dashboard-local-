@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I.B.U NOTIFICATION ADMIN</title>
+  
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='graphs_modern.css') }}">
+  
+  <style>
+    .admin-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .status-card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 15px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    
+    .status-enabled {
+      border-left: 4px solid #22c55e;
+    }
+    
+    .status-disabled {
+      border-left: 4px solid #ef4444;
+    }
+    
+    .config-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .config-item:last-child {
+      border-bottom: none;
+    }
+    
+    .config-label {
+      color: #c0c0c0;
+      font-weight: 500;
+    }
+    
+    .config-value {
+      color: #e06150;
+      font-weight: 600;
+    }
+    
+    .config-value.success {
+      color: #22c55e;
+    }
+    
+    .config-value.error {
+      color: #ef4444;
+    }
+    
+    .test-button {
+      background: linear-gradient(135deg, #e06150 0%, #d14a3a 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(224, 97, 80, 0.3);
+      margin: 10px 5px;
+    }
+    
+    .test-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(224, 97, 80, 0.4);
+    }
+    
+    .test-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .result-box {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 15px;
+      margin: 15px 0;
+      font-family: monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+    
+    .result-success {
+      border-left: 4px solid #22c55e;
+      color: #22c55e;
+    }
+    
+    .result-error {
+      border-left: 4px solid #ef4444;
+      color: #ef4444;
+    }
+    
+    .setup-instructions {
+      background: rgba(255, 193, 7, 0.1);
+      border: 1px solid rgba(255, 193, 7, 0.3);
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    
+    .setup-instructions h3 {
+      color: #ffc107;
+      margin-bottom: 15px;
+    }
+    
+    .setup-instructions ol {
+      color: #e0e0e0;
+      line-height: 1.6;
+    }
+    
+    .setup-instructions code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #ffc107;
+    }
+    
+    .nav-buttons {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+    }
+    
+    .logout-button {
+      background: linear-gradient(135deg, rgba(220, 53, 69, 0.8), rgba(180, 43, 59, 0.8));
+      border: 2px solid rgba(220, 53, 69, 0.6);
+      border-radius: 15px;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(10px);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+    }
+    
+    .logout-button:hover {
+      background: linear-gradient(135deg, rgba(220, 53, 69, 1), rgba(180, 43, 59, 1));
+      border-color: rgba(220, 53, 69, 0.8);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(220, 53, 69, 0.4);
+    }
+    
+    .logout-button:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <!-- Particles background -->
+  <div class="particles-container" id="particles"></div>
+  
+  <!-- Background gradient overlay -->
+  <div class="background-overlay"></div>
+
+  <!-- Main container -->
+  <div class="main-container">
+    <!-- Header section -->
+    <header class="header-section">
+      <div class="header-content">
+        <div class="title-section">
+          <h1 class="main-title animate-slide-up">NOTIFICATION ADMIN</h1>
+          <p class="subtitle animate-slide-up" style="animation-delay: 0.2s;">
+            Email notification system configuration and testing
+          </p>
+        </div>
+        <div class="nav-buttons">
+          <button class="nav-button animate-slide-up" style="animation-delay: 0.4s;" onclick="window.location.href='{{ url_for('index') }}'">
+            <span>Main Page</span>
+          </button>
+          <button class="logout-button animate-slide-up" style="animation-delay: 0.5s;" onclick="window.location.href='{{ url_for('admin_logout') }}'">
+            <span>🔒 Logout</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="admin-container">
+      <!-- Notification Status -->
+      <div id="notificationStatus" class="status-card">
+        <h2>🔧 System Status</h2>
+        <div id="statusContent">
+          <div class="loading-spinner-member"></div>
+          <p style="text-align: center; color: #fff; margin-top: 20px;">Loading notification status...</p>
+        </div>
+      </div>
+
+      <!-- Setup Instructions -->
+      <div id="setupInstructions" class="setup-instructions" style="display: none;">
+        <h3>📋 Setup Instructions</h3>
+        <ol>
+          <li>Install required package: <code>pip install python-dotenv</code></li>
+          <li>Copy <code>.env.example</code> to <code>.env</code> in your project root</li>
+          <li>Edit <code>.env</code> file with your email settings:
+            <ul>
+              <li><strong>Gmail:</strong> Use your email and an "App Password" (not regular password)</li>
+              <li><strong>Other providers:</strong> Use appropriate SMTP settings</li>
+            </ul>
+          </li>
+          <li>Add admin email addresses to receive notifications</li>
+          <li>Restart the Flask application</li>
+          <li>Test the system using the button below</li>
+        </ol>
+      </div>
+
+      <!-- Test Controls -->
+      <div class="status-card">
+        <h2>🧪 Testing</h2>
+        <p style="color: #c0c0c0; margin-bottom: 15px;">
+          Send a test probation failure notification to verify your email configuration.
+        </p>
+        
+        <button id="testNotificationBtn" class="test-button" onclick="testNotification()">
+          📧 Send Test Notification
+        </button>
+        
+        <button class="test-button" onclick="refreshStatus()" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">
+          🔄 Refresh Status
+        </button>
+        
+        <div id="testResult"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    // Particle system (same as other pages)
+    function createParticles() {
+      const container = document.getElementById('particles');
+      const particleCount = 20;
+
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        
+        const size = Math.random() * 6 + 2;
+        particle.style.width = size + 'px';
+        particle.style.height = size + 'px';
+        
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.top = Math.random() * 100 + '%';
+        
+        particle.style.animationDelay = Math.random() * 8 + 's';
+        particle.style.animationDuration = (Math.random() * 4 + 6) + 's';
+        
+        container.appendChild(particle);
+      }
+    }
+
+    function loadNotificationStatus() {
+      fetch('/notification_status')
+        .then(response => response.json())
+        .then(data => {
+          displayNotificationStatus(data);
+        })
+        .catch(error => {
+          console.error('Error loading notification status:', error);
+          document.getElementById('statusContent').innerHTML = `
+            <div class="result-box result-error">
+              Error loading notification status: ${error.message}
+            </div>
+          `;
+        });
+    }
+
+    function displayNotificationStatus(status) {
+      const statusCard = document.getElementById('notificationStatus');
+      const statusContent = document.getElementById('statusContent');
+      const setupInstructions = document.getElementById('setupInstructions');
+      const testBtn = document.getElementById('testNotificationBtn');
+
+      if (status.enabled) {
+        statusCard.classList.add('status-enabled');
+        statusCard.classList.remove('status-disabled');
+        setupInstructions.style.display = 'none';
+        testBtn.disabled = false;
+
+        statusContent.innerHTML = `
+          <div class="config-item">
+            <span class="config-label">Status:</span>
+            <span class="config-value success">✅ ENABLED</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">SMTP Server:</span>
+            <span class="config-value">${status.smtp_server}:${status.smtp_port}</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">Sender Email:</span>
+            <span class="config-value ${status.sender_configured ? 'success' : 'error'}">
+              ${status.sender_configured ? '✅' : '❌'} ${status.sender_email || 'Not configured'}
+            </span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">Admin Recipients:</span>
+            <span class="config-value ${status.admin_emails_configured > 0 ? 'success' : 'error'}">
+              ${status.admin_emails_configured} configured
+            </span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">Notifications Sent:</span>
+            <span class="config-value">${status.notification_history_count}</span>
+          </div>
+          ${status.admin_emails.length > 0 ? `
+          <div class="config-item">
+            <span class="config-label">Recipients:</span>
+            <span class="config-value">${status.admin_emails.join(', ')}</span>
+          </div>
+          ` : ''}
+        `;
+
+        if (!status.sender_configured || status.admin_emails_configured === 0) {
+          setupInstructions.style.display = 'block';
+          testBtn.disabled = true;
+        }
+
+      } else {
+        statusCard.classList.add('status-disabled');
+        statusCard.classList.remove('status-enabled');
+        setupInstructions.style.display = 'block';
+        testBtn.disabled = true;
+
+        statusContent.innerHTML = `
+          <div class="config-item">
+            <span class="config-label">Status:</span>
+            <span class="config-value error">❌ DISABLED</span>
+          </div>
+          <div class="config-item">
+            <span class="config-label">Error:</span>
+            <span class="config-value error">${status.error || 'Notification service not available'}</span>
+          </div>
+        `;
+      }
+    }
+
+    function testNotification() {
+      const testBtn = document.getElementById('testNotificationBtn');
+      const testResult = document.getElementById('testResult');
+      
+      testBtn.disabled = true;
+      testBtn.textContent = '📧 Sending...';
+      
+      testResult.innerHTML = '<div class="result-box">Sending test notification...</div>';
+
+      fetch('/test_notification')
+        .then(response => response.json())
+        .then(data => {
+          if (data.message) {
+            testResult.innerHTML = `<div class="result-box result-success">✅ ${data.message}</div>`;
+          } else {
+            testResult.innerHTML = `<div class="result-box result-error">❌ ${data.error || 'Unknown error'}</div>`;
+          }
+        })
+        .catch(error => {
+          testResult.innerHTML = `<div class="result-box result-error">❌ Network error: ${error.message}</div>`;
+        })
+        .finally(() => {
+          testBtn.disabled = false;
+          testBtn.textContent = '📧 Send Test Notification';
+        });
+    }
+
+    function refreshStatus() {
+      document.getElementById('statusContent').innerHTML = `
+        <div class="loading-spinner-member"></div>
+        <p style="text-align: center; color: #fff; margin-top: 20px;">Refreshing status...</p>
+      `;
+      loadNotificationStatus();
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+      createParticles();
+      loadNotificationStatus();
+    });
+  </script>
+</body>
+</html>

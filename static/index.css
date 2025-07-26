@@ -32,6 +32,202 @@
       50% { transform: translateY(-20px) rotate(180deg); opacity: 1; }
     }
 
+    /* Update History Sidebar */
+    .update-history-sidebar {
+      position: fixed;
+      top: 0;
+      left: -320px;
+      width: 320px;
+      height: 100vh;
+      background: linear-gradient(135deg, rgba(42, 42, 42, 0.95) 0%, rgba(30, 30, 30, 0.95) 100%);
+      backdrop-filter: blur(20px);
+      border-right: 2px solid rgba(224, 97, 80, 0.3);
+      z-index: 100;
+      transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(224, 97, 80, 0.5) transparent;
+    }
+
+    .update-history-sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .update-history-sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .update-history-sidebar::-webkit-scrollbar-thumb {
+      background: rgba(224, 97, 80, 0.5);
+      border-radius: 3px;
+    }
+
+    .update-history-sidebar.open {
+      left: 0;
+    }
+
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(224, 97, 80, 0.1);
+    }
+
+    .sidebar-header h3 {
+      margin: 0;
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .sidebar-toggle {
+      background: rgba(224, 97, 80, 0.8);
+      border: none;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+
+    .sidebar-toggle:hover {
+      background: rgba(224, 97, 80, 1);
+      transform: scale(1.1);
+    }
+
+    .sidebar-content {
+      padding: 0;
+    }
+
+    .update-item {
+      padding: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease;
+    }
+
+    .update-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .update-item.current {
+      background: linear-gradient(135deg, rgba(224, 97, 80, 0.15) 0%, rgba(224, 97, 80, 0.05) 100%);
+      border-left: 4px solid rgba(224, 97, 80, 0.8);
+    }
+
+    .update-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .version {
+      background: linear-gradient(135deg, #e06150 0%, #ff7a6b 100%);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 15px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .update-item.current .version {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+
+    .date {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 0.8rem;
+    }
+
+    .update-title {
+      color: #fff;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+
+    .update-changes {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .change-item {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 0.85rem;
+      line-height: 1.4;
+      padding-left: 4px;
+    }
+
+    /* Update Instructions Styling */
+    .update-instructions {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      border-radius: 8px;
+      font-size: 0.8rem;
+    }
+
+    .instruction-title {
+      font-weight: 600;
+      color: rgba(102, 126, 234, 0.9);
+      margin-bottom: 8px;
+    }
+
+    .instruction-text {
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.4;
+    }
+
+    .instruction-text code {
+      background: rgba(102, 126, 234, 0.2);
+      color: rgba(102, 126, 234, 1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+
+    /* Sidebar Toggle Button (when sidebar is closed) */
+    .sidebar-toggle-floating {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: linear-gradient(135deg, rgba(224, 97, 80, 0.9) 0%, rgba(255, 122, 107, 0.9) 100%);
+      border: none;
+      color: white;
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(224, 97, 80, 0.4);
+      backdrop-filter: blur(10px);
+    }
+
+    .sidebar-toggle-floating:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(224, 97, 80, 0.6);
+    }
+
+    .sidebar-toggle-floating.hidden {
+      display: none;
+    }
+
     /* Main container */
     .landing-container {
       display: flex;
@@ -56,10 +252,67 @@
     /* Logo styles */
     .logo-container {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       margin-bottom: 3rem;
       animation: logoEntrance 2s ease-out;
+      position: relative;
+    }
+
+    /* Minecraft-style "NEW UPDATE" text */
+    .minecraft-update-text {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      text-align: center;
+      font-size: 1.35rem;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 
+        2px 2px 0px #413625;
+      animation: updateTextFadeIn 1s ease-out 2s both, minecraftBounce 10s ease-in-out infinite;
+      letter-spacing: 1px;
+      position: absolute;
+      bottom: 5%;
+      right: -25%;
+      z-index: 15;
+      transform-origin: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      opacity: 0;
+    }
+
+    .minecraft-update-text:hover {
+      transform: scale(1.1);
+      text-shadow: 
+        3px 3px 0px #413625,
+        0px 0px 15px rgba(255, 255, 255, 0.5);
+    }
+
+    @keyframes updateTextFadeIn {
+      0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.8) rotate(5deg);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotate(5deg);
+      }
+    }
+
+    @keyframes minecraftBounce {
+      0%, 100% {
+        transform: rotate(5deg);
+        text-shadow: 
+          2px 2px 0px #aa5b00,
+      }
+      50% {
+        transform: rotate(-5deg);
+        text-shadow: 
+          2px 2px 0px #aa6f00,
+      }
     }
 
     #logo_IBU {

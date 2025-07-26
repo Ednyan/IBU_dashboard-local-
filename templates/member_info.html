@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I.B.U MEMBER INFO</title>
+  
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='graphs_modern.css') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='member_info.css') }}">
+
+</head>
+<body>
+  <!-- Particles background -->
+  <div class="particles-container" id="particles"></div>
+  
+  <!-- Background gradient overlay -->
+  <div class="background-overlay"></div>
+
+  <!-- Main container -->
+  <div class="main-container">
+    <!-- Header section -->
+    <header class="header-section">
+      <div class="header-content">
+        <div class="title-section">
+          <h1 class="main-title animate-slide-up">MEMBER TRACKING</h1>
+          <p class="subtitle animate-slide-up" style="animation-delay: 0.2s;">
+            New CSV received {{ time_ago }} ({{ latest_date }})
+          </p>
+        </div>
+        <button class="nav-button animate-slide-up" style="animation-delay: 0.4s;" onclick="window.location.href='{{ url_for('index') }}'">
+          <span>Main Page</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Horizontal Navigation -->
+    <nav class="horizontal-nav animate-slide-up" style="animation-delay: 0.4s;">
+      <a href="{{ url_for('visualization') }}" class="nav-tab">
+        <span class="nav-icon">📊</span>
+        <span>Points Data</span>
+      </a>
+      <a href="#" class="nav-tab disabled">
+        <span class="nav-icon">📈</span>
+        <span>Trends</span>
+        <small class="coming-soon">Soon</small>
+      </a>
+      <a href="{{ url_for('member_info') }}" class="nav-tab active">
+        <span class="nav-icon">👥</span>
+        <span>Member Tracking</span>
+      </a>
+    </nav>
+
+    <!-- Stats Summary -->
+    <div id="statsSummary" class="stats-summary animate-slide-up" style="animation-delay: 0.6s; display: none;">
+      <!-- Will be populated by JavaScript -->
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="animate-slide-up" style="animation-delay: 0.8s;">
+      <div class="loading-spinner-member"></div>
+      <p style="text-align: center; color: #fff; margin-top: 20px;">Loading member probation data...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="error-message" style="display: none;">
+      <h3>Error Loading Data</h3>
+      <p id="errorMessage">Unable to load member probation data. Please try refreshing the page.</p>
+    </div>
+
+    <!-- Members Container -->
+    <div id="membersContainer" class="members-container" style="display: none;">
+      <!-- Will be populated by JavaScript -->
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    // Particle system (same as other pages)
+    function createParticles() {
+      const container = document.getElementById('particles');
+      const particleCount = 20;
+
+      for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        
+        const size = Math.random() * 6 + 2;
+        particle.style.width = size + 'px';
+        particle.style.height = size + 'px';
+        
+        particle.style.left = Math.random() * 100 + '%';
+        particle.style.top = Math.random() * 100 + '%';
+        
+        particle.style.animationDelay = Math.random() * 8 + 's';
+        particle.style.animationDuration = (Math.random() * 4 + 6) + 's';
+        
+        container.appendChild(particle);
+      }
+    }
+
+    // Format numbers with commas
+    function formatNumber(num) {
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    // Calculate progress percentage
+    function calculateProgress(current, target) {
+      return Math.min(100, (current / target) * 100);
+    }
+
+    // Create member card HTML
+    function createMemberCard(member) {
+      const statusClasses = {
+        'completed': 'status-completed',
+        'passed': 'status-passed',
+        'failed': 'status-failed',
+        'in_progress': 'status-in_progress'
+      };
+
+      const statusLabels = {
+        'completed': 'Completed',
+        'passed': 'Passed Probation',
+        'failed': 'Failed',
+        'in_progress': 'In Progress'
+      };
+
+      // Create milestones HTML in the requested order: Week, First Month, Three Months
+      let milestonesHtml = '';
+      
+      // Define milestone order
+      const milestoneOrder = [
+        { key: 'week_1', title: 'First Week' },
+        { key: 'month_1', title: 'First Month' },
+        { key: 'month_3', title: 'Three Months' }
+      ];
+      
+      milestoneOrder.forEach(({ key, title }) => {
+        const milestone = member.milestones[key];
+        let milestoneClass = 'pending';
+        let statusText = 'In Progress';
+        let progressPercent = 0;
+        
+        // Enhanced logic: if remaining points is 0, mark as passed
+        if (milestone.passed === true || milestone.remaining_points === 0) {
+          milestoneClass = 'passed';
+          statusText = 'Passed';
+          progressPercent = 100;
+        } else if (milestone.passed === false) {
+          milestoneClass = 'failed';
+          statusText = 'Failed';
+          progressPercent = calculateProgress(milestone.points_at_deadline || member.current_points, milestone.target);
+        } else {
+          progressPercent = calculateProgress(member.current_points, milestone.target);
+        }
+
+        const targetFormatted = formatNumber(milestone.target);
+        const actualPoints = milestone.points_at_deadline || member.current_points;
+        // Cap the displayed points at the milestone target
+        const cappedPoints = Math.min(actualPoints, milestone.target);
+        const pointsFormatted = formatNumber(cappedPoints);
+
+        let detailsText = '';
+        if (milestone.remaining_points === 0) {
+          detailsText = `✅ Target achieved! ${pointsFormatted} / ${targetFormatted} points`;
+        } else if (milestone.passed === null && milestone.days_left > 0) {
+          detailsText = `${formatNumber(milestone.remaining_points)} points needed in ${milestone.days_left} days`;
+        } else if (milestone.passed === null && milestone.days_left === 0) {
+          detailsText = `Deadline today - ${formatNumber(milestone.remaining_points)} points needed`;
+        } else {
+          detailsText = `${pointsFormatted} / ${targetFormatted} points`;
+        }
+
+        milestonesHtml += `
+          <div class="milestone ${milestoneClass}">
+            <div class="milestone-title">${title} - ${statusText}</div>
+            <div class="milestone-details">${detailsText}</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${progressPercent}%"></div>
+            </div>
+          </div>
+        `;
+      });
+
+      // All cards use the same base appearance - no special card classes for status
+      let cardClass = 'member-card';
+      
+      // Add data attributes for filtering
+      let dataAttributes = `data-probation-status="${member.probation_status}"`;
+      if (member.post_probation_status) {
+        dataAttributes += ` data-post-probation-status="${member.post_probation_status}"`;
+      }
+
+      // Create post-probation section HTML
+      let postProbationHtml = '';
+      if (member.probation_status === 'passed' && member.post_probation_status) {
+        const postStatusLabels = {
+          'compliant': 'Compliant',
+          'non_compliant': 'Non-Compliant',
+          'insufficient_data': 'Insufficient Data',
+          'too_early': 'Too Early to Evaluate',
+          'on_track': 'On Track',
+          'at_risk': 'At Risk',
+          'in_progress': 'In Progress'
+        };
+
+        const postStatusClasses = {
+          'compliant': 'status-passed',
+          'non_compliant': 'status-non_compliant',
+          'insufficient_data': 'status-insufficient_data',
+          'too_early': 'status-in_progress',
+          'on_track': 'status-on_track',
+          'at_risk': 'status-at_risk',
+          'in_progress': 'status-in_progress'
+        };
+
+        let periodsHtml = '';
+        if (member.post_probation_periods && member.post_probation_periods.length > 0) {
+          // Show only up to 3 most recent periods (they're already limited by backend)
+          const periodsToShow = member.post_probation_periods.slice(-3);
+          
+          periodsToShow.forEach(period => {
+            // Simplified status text - just show basic status
+            const statusText = period.status === 'compliant' ? 'Compliant ✅' : 
+                              period.status === 'non_compliant' ? 'Non-Compliant ❌' : 
+                              period.status === 'insufficient_data' ? 'Insufficient Data ⚠️' :
+                              'In Progress 📈'; // Covers on_track, at_risk, just_started
+            
+            let pointsText;
+            let currentPeriodInfo = '';
+            
+            // Show point numbers when available, otherwise show status
+            if (period.status === 'insufficient_data') {
+              pointsText = 'Insufficient Data';
+            } else if (period.points_earned !== null && period.points_earned !== undefined) {
+              pointsText = `${formatNumber(period.points_earned)} / ${formatNumber(period.target_points)} points earned`;
+            } else if (period.status === 'compliant') {
+              pointsText = 'Compliant';
+            } else if (period.status === 'non_compliant') {
+              pointsText = 'Non-Compliant';
+            } else {
+              pointsText = 'In Progress';
+            }
+            
+            // Simplified current period tracking info - only days elapsed and progress
+            if (period.is_current_period && period.days_elapsed !== undefined) {
+              const progress = period.points_earned / period.target_points * 100;
+              currentPeriodInfo = `
+                <div class="current-period-info">
+                  <div><span class="label">Days Elapsed:</span> ${period.days_elapsed} / 90</div>
+                  <div><span class="label">Current Progress:</span> ${progress.toFixed(1)}%</div>
+                </div>
+              `;
+            }
+
+            const periodTitle = period.is_current_period ? 
+              `<strong>Current Period ${period.period_number}</strong> (${period.start_date} to ${period.end_date})` :
+              `<strong>Period ${period.period_number}</strong> (${period.start_date} to ${period.end_date})`;
+
+            periodsHtml += `
+              <div class="post-probation-period ${period.status}">
+                ${periodTitle}<br>
+                <strong>Status:</strong> ${statusText}<br>
+                <strong>Performance:</strong> ${pointsText}
+                ${currentPeriodInfo}
+              </div>
+            `;
+          });
+        }
+
+        let statusMessage = '';
+        if (member.post_probation_status === 'too_early') {
+          statusMessage = 'Member recently completed probation. Post-probation evaluation will begin after 90 days.';
+        } else if (member.post_probation_status === 'insufficient_data') {
+          statusMessage = 'Not enough CSV data available to properly evaluate post-probation performance. More historical data needed.';
+        } else if (member.post_probation_status === 'non_compliant') {
+          statusMessage = 'Member is not consistently meeting the post-probation requirement of 3M points per 90-day period.';
+        } else if (member.post_probation_status === 'on_track') {
+          statusMessage = 'Member is currently on track to meet the post-probation requirement of 3M points per 90-day period.';
+        } else if (member.post_probation_status === 'at_risk') {
+          statusMessage = 'Member is at risk of not meeting the post-probation requirement. Current pace is below the target rate.';
+        } else if (member.post_probation_status === 'in_progress') {
+          statusMessage = 'Member is currently in their first post-probation period. Performance is being tracked.';
+        } else {
+          statusMessage = 'Member is successfully meeting post-probation requirements (3M points per 90-day period).';
+        }
+
+        postProbationHtml = `
+          <div class="post-probation-section">
+            <div class="post-probation-title">Post-Probation Performance</div>
+            <div class="post-probation-status ${postStatusClasses[member.post_probation_status]}">
+              ${postStatusLabels[member.post_probation_status]}
+            </div>
+            <div style="color: #e0e0e0; font-size: 0.85em; margin-bottom: 10px;">
+              ${statusMessage}
+            </div>
+            ${periodsHtml ? `<div class="post-probation-periods">${periodsHtml}</div>` : ''}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="member-card ${cardClass}" ${dataAttributes}>
+          <div class="member-header">
+            <div class="member-name">${member.name}</div>
+            <div class="status-badge ${statusClasses[member.probation_status]}">${statusLabels[member.probation_status]}</div>
+          </div>
+          <div class="member-details">
+            <div>Joined: ${member.joined_date}</div>
+            <div>Days since joining: ${member.days_since_joined}</div>
+            <div>Current points: ${formatNumber(member.current_points)}</div>
+          </div>
+          <div class="milestones">
+            ${milestonesHtml}
+          </div>
+          ${postProbationHtml}
+        </div>
+      `;
+    }
+
+    // Create stats summary HTML
+    function createStatsSummary(members) {
+      const stats = {
+        total: members.length,
+        completed: members.filter(m => m.probation_status === 'completed' || m.probation_status === 'passed').length,
+        in_progress: members.filter(m => m.probation_status === 'in_progress').length,
+        failed: members.filter(m => m.probation_status === 'failed').length,
+        post_compliant: members.filter(m => m.probation_status === 'passed' && m.post_probation_status === 'compliant').length,
+        post_non_compliant: members.filter(m => m.probation_status === 'passed' && m.post_probation_status === 'non_compliant').length
+      };
+
+      return `
+        <div class="stat-item" onclick="filterMembers('all')" data-filter="all">
+          <div class="stat-number">${stats.total}</div>
+          <div class="stat-label">Total Members</div>
+        </div>
+        <div class="stat-item" onclick="filterMembers('completed')" data-filter="completed">
+          <div class="stat-number" style="color: #4CAF50;">${stats.completed}</div>
+          <div class="stat-label">Completed Probation</div>
+        </div>
+        <div class="stat-item" onclick="filterMembers('in_progress')" data-filter="in_progress">
+          <div class="stat-number" style="color: #FF9800;">${stats.in_progress}</div>
+          <div class="stat-label">In Progress</div>
+        </div>
+        <div class="stat-item" onclick="filterMembers('failed')" data-filter="failed">
+          <div class="stat-number" style="color: #f44336;">${stats.failed}</div>
+          <div class="stat-label">Failed Probation</div>
+        </div>
+        <div class="stat-item" onclick="filterMembers('post_compliant')" data-filter="post_compliant">
+          <div class="stat-number" style="color: #4CAF50;">${stats.post_compliant}</div>
+          <div class="stat-label">Post-Probation Compliant</div>
+        </div>
+        <div class="stat-item" onclick="filterMembers('post_non_compliant')" data-filter="post_non_compliant">
+          <div class="stat-number" style="color: #9C27B0;">${stats.post_non_compliant}</div>
+          <div class="stat-label">Post-Probation Non-Compliant</div>
+        </div>
+      `;
+    }
+
+    // Filter members based on category
+    function filterMembers(filterType) {
+      const memberCards = document.querySelectorAll('.member-card');
+      const statItems = document.querySelectorAll('.stat-item');
+      
+      // Remove active class from all stat items
+      statItems.forEach(item => item.classList.remove('active'));
+      
+      // Add active class to clicked stat item
+      const activeItem = document.querySelector(`[data-filter="${filterType}"]`);
+      if (activeItem) {
+        activeItem.classList.add('active');
+      }
+      
+      // Show/hide member cards based on filter
+      memberCards.forEach(card => {
+        const probationStatus = card.getAttribute('data-probation-status');
+        const postProbationStatus = card.getAttribute('data-post-probation-status');
+        let shouldShow = false;
+        
+        switch(filterType) {
+          case 'all':
+            shouldShow = true;
+            break;
+          case 'completed':
+            shouldShow = probationStatus === 'completed' || probationStatus === 'passed';
+            break;
+          case 'in_progress':
+            shouldShow = probationStatus === 'in_progress';
+            break;
+          case 'failed':
+            shouldShow = probationStatus === 'failed';
+            break;
+          case 'post_compliant':
+            shouldShow = probationStatus === 'passed' && postProbationStatus === 'compliant';
+            break;
+          case 'post_non_compliant':
+            shouldShow = probationStatus === 'passed' && postProbationStatus === 'non_compliant';
+            break;
+        }
+        
+        if (shouldShow) {
+          card.classList.remove('hidden');
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+    }
+
+    // Load probation data
+    function loadProbationData() {
+      fetch('/get_probation_data')
+        .then(response => response.json())
+        .then(data => {
+          const loadingState = document.getElementById('loadingState');
+          const errorState = document.getElementById('errorState');
+          const membersContainer = document.getElementById('membersContainer');
+          const statsSummary = document.getElementById('statsSummary');
+
+          if (data.error) {
+            loadingState.style.display = 'none';
+            errorState.style.display = 'block';
+            document.getElementById('errorMessage').textContent = data.error;
+            return;
+          }
+
+          // Hide loading, show content
+          loadingState.style.display = 'none';
+          membersContainer.style.display = 'grid';
+          statsSummary.style.display = 'grid';
+
+          // Populate stats summary
+          statsSummary.innerHTML = createStatsSummary(data.members);
+
+          // Populate member cards
+          const memberCardsHtml = data.members.map(member => createMemberCard(member)).join('');
+          membersContainer.innerHTML = memberCardsHtml;
+
+          // Set default filter to "all" (Total Members)
+          filterMembers('all');
+
+          console.log('Probation data loaded successfully:', data);
+        })
+        .catch(error => {
+          console.error('Error loading probation data:', error);
+          const loadingState = document.getElementById('loadingState');
+          const errorState = document.getElementById('errorState');
+          
+          loadingState.style.display = 'none';
+          errorState.style.display = 'block';
+          document.getElementById('errorMessage').textContent = 'Network error: ' + error.message;
+        });
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+      createParticles();
+      loadProbationData();
+    });
+  </script>
+</body>
+</html>

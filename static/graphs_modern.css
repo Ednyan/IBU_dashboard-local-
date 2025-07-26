@@ -1,5 +1,110 @@
 /* Modern Graphs Page Styling - I.B.U Dashboard */
 
+/* Horizontal Navigation Styles */
+.horizontal-nav {
+  display: flex;
+  justify-content: center;
+  gap: 25px;
+  margin: 25px auto 40px;
+  max-width: 800px;
+}
+
+.nav-tab {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(20px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 35px;
+  padding: 18px 32px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 1.1em;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  min-width: 140px;
+  justify-content: center;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.nav-tab::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.nav-tab:hover::before {
+  left: 100%;
+}
+
+.nav-tab:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1));
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.25);
+  text-shadow: 0 2px 10px rgba(255, 255, 255, 0.3);
+}
+
+.nav-tab.active {
+  background: linear-gradient(135deg, rgba(224, 97, 80, 0.6), rgba(224, 97, 80, 0.3));
+  border-color: rgba(224, 97, 80, 0.8);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(224, 97, 80, 0.4);
+  transform: translateY(-2px);
+}
+
+.nav-tab.active:hover {
+  transform: translateY(-4px) scale(1.05);
+  box-shadow: 0 15px 40px rgba(224, 97, 80, 0.5);
+}
+
+.nav-tab.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
+}
+
+.nav-tab .nav-icon {
+  font-size: 1.4em;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.coming-soon {
+  font-size: 0.65em;
+  background: linear-gradient(45deg, rgba(255, 193, 7, 0.9), rgba(255, 152, 0, 0.8));
+  color: rgba(0, 0, 0, 0.9);
+  padding: 4px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  border: 1px solid rgba(255, 193, 7, 0.6);
+  backdrop-filter: blur(10px);
+  animation: pulse 2s infinite;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+
 /* Reset and base styles */
 * {
   margin: 0;
@@ -90,6 +195,13 @@ body {
   min-width: 300px;
 }
 
+.header-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .main-title {
   font-size: clamp(2.5rem, 5vw, 4rem);
   font-weight: 800;
@@ -160,7 +272,6 @@ body {
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  margin-bottom: 1.5rem;
   flex-wrap: wrap;
 }
 
@@ -295,8 +406,7 @@ body {
 
 /* Content section */
 .content-section {
-  display: flex;
-  gap: 2rem;
+  padding: 0 20px;
   min-height: 600px;
 }
 
@@ -360,17 +470,22 @@ body {
   right: 0.5rem;
   top: 50%;
   transform: translateY(-50%);
-  background: rgba(224, 97, 80, 0.2);
-  color: #e06150;
+  background: linear-gradient(45deg, rgba(255, 193, 7, 0.9), rgba(255, 152, 0, 0.8));
+  color: rgba(0, 0, 0, 0.9);
   padding: 0.2rem 0.6rem;
   border-radius: 20px;
   font-size: 0.7rem;
   font-weight: 600;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+  border: 1px solid rgba(255, 193, 7, 0.6);
+  animation: pulse 2s infinite;
 }
 
 /* Chart section */
 .chart-section {
-  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
   background: rgba(45, 45, 45, 0.8);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(224, 97, 80, 0.2);
@@ -552,6 +667,309 @@ body {
 
 .notification-info {
   border-color: #4488ff;
+}
+
+.notification-success {
+  border-color: #00cc66;
+}
+
+/* Download Modal Styles */
+.download-modal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  animation: modalFadeIn 0.3s ease-out;
+}
+
+.modal-content {
+  background: linear-gradient(135deg, rgba(45, 45, 45, 0.95) 0%, rgba(35, 35, 35, 0.95) 100%);
+  backdrop-filter: blur(20px);
+  margin: 5% auto;
+  padding: 0;
+  border: 2px solid rgba(224, 97, 80, 0.3);
+  border-radius: 20px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-header {
+  background: rgba(224, 97, 80, 0.2);
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid rgba(224, 97, 80, 0.3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #e06150;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.modal-close:hover {
+  color: #e06150;
+  background: rgba(224, 97, 80, 0.2);
+  transform: scale(1.1);
+}
+
+.modal-body {
+  padding: 2rem;
+  color: #e0e0e0;
+}
+
+.modal-body p {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.1rem;
+  color: #c0c0c0;
+}
+
+.date-range-section {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.date-input-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.date-input-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #e06150;
+  font-size: 0.95rem;
+}
+
+.modal-date-input {
+  width: 100%;
+  background: rgba(30, 30, 30, 0.9);
+  border: 2px solid rgba(224, 97, 80, 0.3);
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  color: #e0e0e0;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.modal-date-input:hover {
+  border-color: rgba(224, 97, 80, 0.6);
+}
+
+.modal-date-input:focus {
+  outline: none;
+  border-color: #e06150;
+  box-shadow: 0 0 0 3px rgba(224, 97, 80, 0.2);
+}
+
+/* Ensure custom datepicker styling applies to modal inputs */
+.modal-date-input.custom-datepicker {
+  cursor: pointer;
+  background: rgba(30, 30, 30, 0.9);
+  border: 2px solid rgba(224, 97, 80, 0.3);
+  color: #e0e0e0;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.modal-date-input.custom-datepicker:hover {
+  border-color: rgba(224, 97, 80, 0.6);
+  box-shadow: 0 0 0 3px rgba(224, 97, 80, 0.1);
+}
+
+.modal-date-input.custom-datepicker:focus {
+  outline: none;
+  border-color: #e06150;
+  box-shadow: 0 0 0 3px rgba(224, 97, 80, 0.2);
+}
+
+.quick-select-section {
+  margin-bottom: 2rem;
+}
+
+.quick-select-section h4 {
+  margin: 0 0 1rem 0;
+  color: #e06150;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.quick-select-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.quick-select-btn {
+  background: rgba(224, 97, 80, 0.2);
+  border: 2px solid rgba(224, 97, 80, 0.4);
+  border-radius: 25px;
+  padding: 0.6rem 1.2rem;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.quick-select-btn:hover {
+  background: rgba(224, 97, 80, 0.4);
+  border-color: rgba(224, 97, 80, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(224, 97, 80, 0.3);
+}
+
+.available-files-info {
+  background: rgba(224, 97, 80, 0.1);
+  border: 1px solid rgba(224, 97, 80, 0.2);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.available-files-info .info-icon {
+  color: #4488ff;
+  margin-right: 0.5rem;
+}
+
+#fileCountText {
+  color: #c0c0c0;
+  font-weight: 500;
+}
+
+.modal-footer {
+  background: rgba(30, 30, 30, 0.5);
+  padding: 1.5rem 2rem;
+  border-top: 1px solid rgba(224, 97, 80, 0.2);
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.modal-btn {
+  padding: 0.8rem 1.8rem;
+  border: none;
+  border-radius: 25px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 120px;
+}
+
+.cancel-btn {
+  background: rgba(128, 128, 128, 0.2);
+  border: 2px solid rgba(128, 128, 128, 0.4);
+  color: #c0c0c0;
+}
+
+.cancel-btn:hover {
+  background: rgba(128, 128, 128, 0.3);
+  border-color: rgba(128, 128, 128, 0.6);
+  transform: translateY(-2px);
+}
+
+.download-btn {
+  background: linear-gradient(135deg, #e06150 0%, #d14a3a 100%);
+  border: 2px solid transparent;
+  color: white;
+  box-shadow: 0 4px 15px rgba(224, 97, 80, 0.3);
+}
+
+.download-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(224, 97, 80, 0.4);
+}
+
+/* Modal animations */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Mobile responsiveness for modal */
+@media (max-width: 768px) {
+  .modal-content {
+    width: 95%;
+    margin: 10% auto;
+  }
+  
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 1rem;
+  }
+  
+  .date-range-section {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .quick-select-buttons {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .quick-select-btn {
+    width: 100%;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+  }
+  
+  .modal-btn {
+    width: 100%;
+  }
 }
 
 /* Animation classes */

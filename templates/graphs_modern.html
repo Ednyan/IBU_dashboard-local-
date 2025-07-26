@@ -32,11 +32,33 @@
             New CSV received {{ time_ago }} ({{ latest_date }})
           </p>
         </div>
-        <button class="nav-button animate-slide-up" style="animation-delay: 0.4s;" onclick="window.location.href='{{ url_for('index') }}'">
-          <span>← Main Page</span>
-        </button>
+        <div class="header-buttons">
+          <button class="nav-button animate-slide-up" style="animation-delay: 0.4s;" onclick="downloadCSVFiles()">
+            <span>📥 Download Data</span>
+          </button>
+          <button class="nav-button animate-slide-up" style="animation-delay: 0.5s;" onclick="window.location.href='{{ url_for('index') }}'">
+            <span>Main Page</span>
+          </button>
+        </div>
       </div>
     </header>
+
+    <!-- Horizontal Navigation -->
+    <nav class="horizontal-nav animate-slide-up" style="animation-delay: 0.4s;">
+      <a href="{{ url_for('visualization') }}" class="nav-tab active">
+        <span class="nav-icon">📊</span>
+        <span>Points Data</span>
+      </a>
+      <a href="#" class="nav-tab disabled">
+        <span class="nav-icon">📈</span>
+        <span>Trends</span>
+        <small class="coming-soon">Soon</small>
+      </a>
+      <a href="{{ url_for('member_info') }}" class="nav-tab">
+        <span class="nav-icon">👥</span>
+        <span>Member Tracking</span>
+      </a>
+    </nav>
 
     <!-- Control panel -->
     <div class="control-section animate-slide-up" style="animation-delay: 0.6s;">
@@ -67,28 +89,8 @@
 
     <!-- Main content area -->
     <div class="content-section">
-      <!-- Sidebar navigation -->
-      <aside class="sidebar animate-slide-left" style="animation-delay: 0.8s;">
-        <nav class="nav-menu">
-          <button class="nav-item active" onclick="window.location.href='{{ url_for('visualization') }}'">
-            <div class="nav-icon">📊</div>
-            <span>Points Data</span>
-          </button>
-          <button class="nav-item" disabled>
-            <div class="nav-icon">📈</div>
-            <span>Trends</span>
-            <small class="coming-soon">Soon</small>
-          </button>
-          <button class="nav-item" disabled>
-            <div class="nav-icon">👥</div>
-            <span>Member Info</span>
-            <small class="coming-soon">Soon</small>
-          </button>
-        </nav>
-      </aside>
-
       <!-- Chart area -->
-      <main class="chart-section animate-slide-right" style="animation-delay: 1s;">
+      <main class="chart-section animate-slide-up" style="animation-delay: 0.8s;">
         <div class="chart-container">
           <div class="chart-header">
             <h2 class="chart-title">Team Performance Analysis</h2>
@@ -146,6 +148,168 @@
         container.appendChild(particle);
       }
     }
+
+    // Download CSV files function - now shows modal first
+    function downloadCSVFiles() {
+      openDownloadModal();
+    }
+
+    // Open the download modal
+    function openDownloadModal() {
+      const modal = document.getElementById('downloadModal');
+      modal.style.display = 'block';
+      
+      // Set default date range (last month)
+      setQuickRange('month');
+      
+      // Update file count
+      updateFileCount();
+    }
+
+    // Close the download modal
+    function closeDownloadModal() {
+      const modal = document.getElementById('downloadModal');
+      modal.style.display = 'none';
+    }
+
+    // Set quick date ranges
+    function setQuickRange(range) {
+      const today = new Date();
+      const startDate = document.getElementById('modalStartDate');
+      const endDate = document.getElementById('modalEndDate');
+      
+      // Format date as YYYY-MM-DD for input[type="date"]
+      const formatDate = (date) => {
+        return date.toISOString().split('T')[0];
+      };
+      
+      endDate.value = formatDate(today);
+      
+      switch(range) {
+        case 'week':
+          const weekAgo = new Date(today);
+          weekAgo.setDate(today.getDate() - 7);
+          startDate.value = formatDate(weekAgo);
+          break;
+        case 'month':
+          const monthAgo = new Date(today);
+          monthAgo.setMonth(today.getMonth() - 1);
+          startDate.value = formatDate(monthAgo);
+          break;
+        case '3months':
+          const threeMonthsAgo = new Date(today);
+          threeMonthsAgo.setMonth(today.getMonth() - 3);
+          startDate.value = formatDate(threeMonthsAgo);
+          break;
+        case 'all':
+          // Set to earliest possible date (we can adjust this based on actual data)
+          startDate.value = '2025-01-01';
+          break;
+      }
+      
+      updateFileCount();
+    }
+
+    // Update file count based on selected date range
+    function updateFileCount() {
+      const startDate = document.getElementById('modalStartDate').value;
+      const endDate = document.getElementById('modalEndDate').value;
+      const fileCountText = document.getElementById('fileCountText');
+      
+      if (!startDate || !endDate) {
+        fileCountText.textContent = 'Please select both start and end dates';
+        return;
+      }
+      
+      // Make an API call to get file count for the selected range
+      fetch(`/api/file_count?start_date=${startDate}&end_date=${endDate}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            fileCountText.textContent = data.error;
+          } else {
+            fileCountText.textContent = `${data.file_count} CSV files available in this date range`;
+          }
+        })
+        .catch(error => {
+          fileCountText.textContent = 'Error checking file count';
+        });
+    }
+
+    // Process the download with selected date range
+    function processDownload() {
+      const startDate = document.getElementById('modalStartDate').value;
+      const endDate = document.getElementById('modalEndDate').value;
+      
+      if (!startDate || !endDate) {
+        showNotification("❌ Please select both start and end dates", "error");
+        return;
+      }
+      
+      if (new Date(startDate) > new Date(endDate)) {
+        showNotification("❌ Start date cannot be after end date", "error");
+        return;
+      }
+      
+      // Close modal
+      closeDownloadModal();
+      
+      // Show loading notification
+      showNotification("Preparing download...", "info");
+      
+      // Create download URL with date parameters
+      const downloadUrl = `/download_csv_files?start_date=${startDate}&end_date=${endDate}`;
+      
+      fetch(downloadUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.blob();
+        })
+        .then(blob => {
+          // Create download link
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          
+          // Generate filename with date range
+          const startFormatted = startDate.replace(/-/g, '');
+          const endFormatted = endDate.replace(/-/g, '');
+          a.download = `IBU_Team_Data_${startFormatted}_to_${endFormatted}.zip`;
+          
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          showNotification("✅ Download started successfully!", "success");
+        })
+        .catch(error => {
+          console.error('Download error:', error);
+          showNotification("❌ Download failed. Please try again.", "error");
+        });
+    }
+
+    // Close modal when clicking outside of it
+    window.onclick = function(event) {
+      const modal = document.getElementById('downloadModal');
+      if (event.target === modal) {
+        closeDownloadModal();
+      }
+    }
+
+    // Update file count when dates change
+    document.addEventListener('DOMContentLoaded', function() {
+      const modalStartDate = document.getElementById('modalStartDate');
+      const modalEndDate = document.getElementById('modalEndDate');
+      
+      if (modalStartDate && modalEndDate) {
+        modalStartDate.addEventListener('change', updateFileCount);
+        modalEndDate.addEventListener('change', updateFileCount);
+      }
+    });
 
     // Global variables - initialize safely (PRESERVE ORIGINAL FUNCTIONALITY)
     let labels = [];
@@ -315,7 +479,7 @@
             availableDates = data.available_dates;
             console.log('Available dates loaded:', availableDates);
             
-            // Initialize both datepickers
+            // Initialize chart datepickers
             $('#startDate, #endDate').datepicker({
               dateFormat: 'yy-mm-dd',
               changeMonth: true,
@@ -340,18 +504,56 @@
                 return [true, '', ''];
               },
               onSelect: function(dateText, inst) {
-                console.log('Date selected:', dateText);
-                // Optional: Auto-trigger chart update for single date selections
-                // You can add logic here if needed
+                console.log('Chart date selected:', dateText);
               }
             });
 
-            // Add click handlers to open datepickers
+            // Initialize modal datepickers with the same styling and functionality
+            $('#modalStartDate, #modalEndDate').datepicker({
+              dateFormat: 'yy-mm-dd',
+              changeMonth: true,
+              changeYear: true,
+              showAnim: 'slideDown',
+              beforeShowDay: function(date) {
+                const dateString = $.datepicker.formatDate('yy-mm-dd', date);
+                const isAvailable = availableDates.includes(dateString);
+                const isWeekend = (date.getDay() === 0 || date.getDay() === 6);
+                
+                // Priority 1: CSV data available (green background)
+                if (isAvailable) {
+                  return [true, 'csv-data-available', 'CSV data available for this date'];
+                }
+                
+                // Priority 2: Weekend styling
+                if (isWeekend) {
+                  return [true, 'weekend-day', 'Weekend'];
+                }
+                
+                // Default: no special styling
+                return [true, '', ''];
+              },
+              onSelect: function(dateText, inst) {
+                console.log('Modal date selected:', dateText);
+                // Update file count when date is selected
+                updateFileCount();
+              }
+            });
+
+            // Add click handlers to open chart datepickers
             $('#startDate').on('click focus', function() {
               $(this).datepicker('show');
             });
             
             $('#endDate').on('click focus', function() {
+              $(this).datepicker('show');
+            });
+
+            // Add click handlers to open modal datepickers
+            $('#modalStartDate').on('click focus', function() {
+              $(this).datepicker('show');
+            });
+            
+            $('#modalEndDate').on('click focus', function() {
               $(this).datepicker('show');
             });
 
@@ -361,7 +563,7 @@
         .catch(error => {
           console.error('Error loading available dates:', error);
           // Initialize basic datepickers even if we can't load available dates
-          $('#startDate, #endDate').datepicker({
+          $('#startDate, #endDate, #modalStartDate, #modalEndDate').datepicker({
             dateFormat: 'yy-mm-dd',
             changeMonth: true,
             changeYear: true,
@@ -574,9 +776,16 @@
     function showNotification(message, type = 'info') {
       const notification = document.createElement('div');
       notification.className = `notification notification-${type}`;
+      
+      // Select appropriate icon based on type
+      let icon = 'ℹ️'; // Default info icon
+      if (type === 'error') icon = '❌';
+      else if (type === 'warning') icon = '⚠️';
+      else if (type === 'success') icon = '✅';
+      
       notification.innerHTML = `
         <div class="notification-content">
-          <span class="notification-icon">${type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
+          <span class="notification-icon">${icon}</span>
           <span class="notification-message">${message}</span>
         </div>
       `;
@@ -715,5 +924,52 @@
         });
     });
   </script>
+
+  <!-- Download Range Selection Modal -->
+  <div id="downloadModal" class="download-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📥 Download CSV Data</h3>
+        <span class="modal-close" onclick="closeDownloadModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <p>Select the date range for the CSV data you want to download:</p>
+        
+        <div class="date-range-section">
+          <div class="date-input-group">
+            <label for="modalStartDate">Start Date:</label>
+            <input type="text" id="modalStartDate" class="modal-date-input custom-datepicker" placeholder="Start Date" readonly>
+          </div>
+          
+          <div class="date-input-group">
+            <label for="modalEndDate">End Date:</label>
+            <input type="text" id="modalEndDate" class="modal-date-input custom-datepicker" placeholder="End Date" readonly>
+          </div>
+        </div>
+        
+        <div class="quick-select-section">
+          <h4>Quick Select:</h4>
+          <div class="quick-select-buttons">
+            <button class="quick-select-btn" onclick="setQuickRange('week')">Last Week</button>
+            <button class="quick-select-btn" onclick="setQuickRange('month')">Last Month</button>
+            <button class="quick-select-btn" onclick="setQuickRange('3months')">Last 3 Months</button>
+            <button class="quick-select-btn" onclick="setQuickRange('all')">All Data</button>
+          </div>
+        </div>
+        
+        <div class="available-files-info">
+          <div id="fileCountInfo">
+            <span class="info-icon">ℹ️</span>
+            <span id="fileCountText">Calculating available files...</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-footer">
+        <button class="modal-btn cancel-btn" onclick="closeDownloadModal()">Cancel</button>
+        <button class="modal-btn download-btn" onclick="processDownload()">Download Selected</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

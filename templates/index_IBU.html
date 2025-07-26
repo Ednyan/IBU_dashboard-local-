@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>I.B.U TEAM SCRAPER</title>
+  <title>I.B.U Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='index.css') }}?v={{ range(1000, 9999) | random }}">
@@ -10,10 +10,32 @@
   <!-- Particles container -->
   <div class="particles-container" id="particles"></div>
 
+  <!-- Update History Sidebar -->
+  <div class="update-history-sidebar" id="update-sidebar">
+    <div class="sidebar-header">
+      <h3>📋 Update History</h3>
+      <button class="sidebar-toggle" id="sidebar-toggle">←</button>
+    </div>
+    <div class="sidebar-content">
+      <!-- Updates will be loaded dynamically -->
+      <div id="updates-container">
+        <div class="stat-item">
+          <span class="stat-icon">🔄</span>
+          <span class="stat-label">Loading updates...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Toggle Button -->
+  <button class="sidebar-toggle-floating" id="floating-toggle">📋</button>
+
   <!-- Main landing container -->
   <div class="landing-container" id="main-container">
     <!-- Logo section -->
     <div class="logo-container">
+      <!-- Minecraft-style "NEW UPDATE" text -->
+      <div class="minecraft-update-text">New Update! <br> Now we are watching you!</div>
       <img id="logo_IBU" src="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}" alt="IBU Logo">
     </div>
 
@@ -21,16 +43,22 @@
     <div class="content-area">
       <img id="IBU_text" src="{{ url_for('static', filename='IBU_text.svg') }}" alt="IBU Logo">
       <!-- Main action button -->
-      <a href="{{ url_for('visualization') }}" class="hero-button">
-        Team Data Analysis
-      </a>
-
+      <div style="display: inline-flex;">
+        <a href="{{ url_for('visualization') }}" class="hero-button" style="margin-left: 1rem; margin-right: 1rem;">
+          Team Data Analysis
+        </a>
+        
+        <!-- Member Info button -->
+        <a href="{{ url_for('member_info') }}" class="hero-button" style="margin-top: 0px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);margin-left: 1rem; margin-right: 1rem;"">
+          Member Tracking
+        </a>
+      </div>
       <!-- Information section -->
       <div class="info-container">
         <p class="update-info" id="latest_date">New CSV received {{ time_ago }}</p>
         <p class="app-info">Data from {{ latest_date }}</p>
         
-        <p class="creator-credit">by Mindeformer with the assistance of Copilot and the support of our kind I.B.U members</p>
+        <p class="creator-credit">by Mindeformer with the assistance of KoolKid, Copilot and the support of our kind I.B.U members</p>
       </div>
     </div>
   </div>
@@ -56,6 +84,103 @@
   </div>
 
   <script>
+    // Sidebar functionality
+    function initSidebar() {
+      const sidebar = document.getElementById('update-sidebar');
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      const floatingToggle = document.getElementById('floating-toggle');
+      
+      let isOpen = false;
+      
+      function toggleSidebar() {
+        isOpen = !isOpen;
+        sidebar.classList.toggle('open', isOpen);
+        floatingToggle.classList.toggle('hidden', isOpen);
+        sidebarToggle.textContent = isOpen ? '←' : '→';
+      }
+      
+      sidebarToggle.addEventListener('click', toggleSidebar);
+      floatingToggle.addEventListener('click', toggleSidebar);
+      
+      // Close sidebar when clicking outside (optional)
+      document.addEventListener('click', function(e) {
+        if (isOpen && !sidebar.contains(e.target) && e.target !== floatingToggle) {
+          toggleSidebar();
+        }
+      });
+    }
+
+    // Load updates from server
+    async function loadUpdates() {
+      console.log('🔄 Loading updates...');
+      const updatesContainer = document.getElementById('updates-container');
+      
+      try {
+        const response = await fetch('/get_updates');
+        const data = await response.json();
+        
+        if (data.success && data.updates && data.updates.length > 0) {
+          console.log('✅ Updates loaded:', data.updates);
+          
+          let updatesHTML = '';
+          
+          data.updates.forEach(update => {
+            const currentClass = update.is_current ? ' current' : '';
+            
+            updatesHTML += `
+              <div class="update-item${currentClass}">
+                <div class="update-header">
+                  <span class="version">${update.version}</span>
+                  <span class="date">${update.date}</span>
+                </div>
+                <div class="update-title">${update.title}</div>
+                <div class="update-changes">
+                  ${update.features.map(feature => `<div class="change-item">${feature}</div>`).join('')}
+                </div>
+              </div>
+            `;
+          });
+          
+          updatesContainer.innerHTML = updatesHTML;
+          
+        } else {
+          console.log('⚠️ No updates found or error:', data.error);
+          updatesContainer.innerHTML = `
+            <div class="update-item">
+              <div class="update-header">
+                <span class="version">No Updates</span>
+                <span class="date">-</span>
+              </div>
+              <div class="update-title">No update history found</div>
+              <div class="update-changes">
+                <div class="change-item">📝 Edit static/updates.txt to add your first update</div>
+              </div>
+            </div>
+          `;
+        }
+        
+      } catch (error) {
+        console.error('❌ Error loading updates:', error);
+        updatesContainer.innerHTML = `
+          <div class="update-item">
+            <div class="update-header">
+              <span class="version">Error</span>
+              <span class="date">-</span>
+            </div>
+            <div class="update-title">Failed to load updates</div>
+            <div class="update-changes">
+              <div class="change-item">❌ ${error.message}</div>
+              <div class="change-item">
+                <button onclick="loadUpdates()" style="background: rgba(224, 97, 80, 0.8); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; margin-top: 8px;">
+                  🔄 Retry Loading
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
     // Particle system
     function createParticles() {
       const container = document.getElementById('particles');
@@ -84,6 +209,31 @@
 
     // Initialize particles when page loads
     document.addEventListener('DOMContentLoaded', function() {
+      // Initialize sidebar functionality
+      initSidebar();
+      
+      // Load updates from server
+      loadUpdates();
+      
+      // Make update text clickable to open sidebar
+      const updateText = document.querySelector('.minecraft-update-text');
+      if (updateText) {
+        updateText.addEventListener('click', function() {
+          const sidebar = document.getElementById('update-sidebar');
+          const floatingToggle = document.getElementById('floating-toggle');
+          
+          // Open the sidebar
+          sidebar.classList.add('open');
+          floatingToggle.classList.add('hidden');
+          
+          // Update the toggle button text
+          const sidebarToggle = document.getElementById('sidebar-toggle');
+          if (sidebarToggle) {
+            sidebarToggle.textContent = '←';
+          }
+        });
+      }
+      
       createParticles();
       
       // Debug: Force stats panel visibility
@@ -172,8 +322,8 @@ This dashboard provides daily insights into team data, allowing you to:<br><br>
 
 • Track team members points<br>
 • Analyze performance metrics over time (in development)<br>
-• See individual team member contributions (in development)<br>
-• Export data for further analysis (in development)<br><br>
+• See individual team member contributions<br>
+• Export data for further analysis<br><br>
 
 The system automatically scrapes and updates team information, ensuring you always have the latest data at your fingertips.<br><br>
 
@@ -274,8 +424,8 @@ This dashboard provides daily insights into team data, allowing you to:
 
 • Track team members points
 • Analyze performance metrics over time (in development)
-• See individual team member contributions (in development)
-• Export data for further analysis (in development)
+• See individual team member contributions
+• Export data for further analysis
 
 The system automatically scrapes and updates team information, ensuring you always have the latest data at your fingertips.
 
