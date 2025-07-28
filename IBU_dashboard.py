@@ -1047,10 +1047,10 @@ def get_member_probation_status():
                     except Exception as e:
                         continue
                 
-                # Calculate remaining points needed first
-                week_1_remaining = max(0, week_1_target - current_points) if current_date < week_1_date else 0
-                month_1_remaining = max(0, month_1_target - current_points) if current_date < month_1_date else 0
-                month_3_remaining = max(0, month_3_target - current_points) if current_date < month_3_date else 0
+                # Calculate remaining points needed (always show actual remaining, even after deadline)
+                week_1_remaining = max(0, week_1_target - current_points)
+                month_1_remaining = max(0, month_1_target - current_points)
+                month_3_remaining = max(0, month_3_target - current_points)
                 
                 # Enhanced logic: check if milestone is passed
                 # A milestone is passed if:

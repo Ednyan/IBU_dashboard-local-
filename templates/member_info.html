@@ -29,9 +29,9 @@
             New CSV received {{ time_ago }} ({{ latest_date }})
           </p>
         </div>
-        <button class="nav-button animate-slide-up" style="animation-delay: 0.4s;" onclick="window.location.href='{{ url_for('index') }}'">
+        <a class="nav-button animate-slide-up" style="animation-delay: 0.4s; text-decoration: none;" href="{{ url_for('index') }}"">
           <span>Main Page</span>
-        </button>
+        </a>
       </div>
     </header>
 
@@ -143,7 +143,7 @@
         let progressPercent = 0;
         
         // Enhanced logic: if remaining points is 0, mark as passed
-        if (milestone.passed === true || milestone.remaining_points === 0) {
+        if (milestone.passed === true && milestone.remaining_points === 0) {
           milestoneClass = 'passed';
           statusText = 'Passed';
           progressPercent = 100;
@@ -162,15 +162,17 @@
         const pointsFormatted = formatNumber(cappedPoints);
 
         let detailsText = '';
-        if (milestone.remaining_points === 0) {
-          detailsText = `✅ Target achieved! ${pointsFormatted} / ${targetFormatted} points`;
-        } else if (milestone.passed === null && milestone.days_left > 0) {
-          detailsText = `${formatNumber(milestone.remaining_points)} points needed in ${milestone.days_left} days`;
-        } else if (milestone.passed === null && milestone.days_left === 0) {
-          detailsText = `Deadline today - ${formatNumber(milestone.remaining_points)} points needed`;
-        } else {
-          detailsText = `${pointsFormatted} / ${targetFormatted} points`;
-        }
+          if (milestone.passed === true) {
+            detailsText = `✅ Target achieved! ${pointsFormatted} / ${targetFormatted} points`;
+          } else if (milestone.passed === false) {
+            detailsText = `❌ Target not met. ${pointsFormatted} / ${targetFormatted} points`;
+          } else if (milestone.passed === null && milestone.days_left > 0) {
+            detailsText = `${formatNumber(milestone.remaining_points)} points needed in ${milestone.days_left} days`;
+          } else if (milestone.passed === null && milestone.days_left === 0) {
+            detailsText = `Deadline today - ${formatNumber(milestone.remaining_points)} points needed`;
+          } else {
+            detailsText = `${pointsFormatted} / ${targetFormatted} points`;
+          }
 
         milestonesHtml += `
           <div class="milestone ${milestoneClass}">
