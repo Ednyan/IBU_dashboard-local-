@@ -12,6 +12,7 @@ import glob
 import re
 import zipfile
 import io
+import threading
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -397,30 +398,7 @@ def data_for_return(data_member, data_points, color_data):
                 "align": "center"
             }
         ],
-        "shapes": [
-            {
-                "type": "circle",
-                "xref": "paper",
-                "yref": "paper",
-                "x0": 0.325,
-                "y0": 0.20,
-                "x1": 1-0.325,
-                "y1": 0.80,
-                "line": {"color": "ffffff", "width": 3},
-                "fillcolor": "rgba(0,0,0,0)"
-            },
-            {
-                "type": "circle",
-                "xref": "paper",
-                "yref": "paper",
-                "x0": 0.207,
-                "y0": 0,
-                "x1": 1-0.207,
-                "y1": 1,
-                "line": {"color": "ffffff", "width": 3},
-                "fillcolor": "rgba(0,0,0,0)"
-            }
-        ],
+
         "font": {
             "color": "white",
             "family": "Inter, Arial, sans-serif",
@@ -1443,7 +1421,7 @@ def get_probation_data():
             try:
                 # Get the current CSV file for notification tracking
                 file_path, _, _ = get_latest_csv_file()
-                notification_service.check_and_notify_failures(probation_data['members'], file_path)
+                threading.Thread(target=notification_service.check_and_notify_failures, args=(probation_data['members'], file_path)).start()
             except Exception as e:
                 print(f"Error sending notifications: {e}")
                 # Don't fail the API call if notifications fail
