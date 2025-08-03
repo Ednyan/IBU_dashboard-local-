@@ -202,8 +202,15 @@
           startDate.value = formatDate(threeMonthsAgo);
           break;
         case 'all':
-          // Set to earliest possible date (we can adjust this based on actual data)
-          startDate.value = '2025-01-01';
+          // Set to earliest available CSV date instead of hardcoded date
+          if (availableDates && availableDates.length > 0) {
+            // Sort available dates and get the earliest one
+            const sortedDates = [...availableDates].sort();
+            startDate.value = sortedDates[0];
+          } else {
+            // Fallback to a reasonable default if no dates are available
+            startDate.value = '2023-01-01';
+          }
           break;
       }
       
