@@ -398,7 +398,6 @@ def data_for_return(data_member, data_points, color_data):
                 "align": "center"
             }
         ],
-
         "font": {
             "color": "white",
             "family": "Inter, Arial, sans-serif",
@@ -1220,15 +1219,7 @@ def get_member_probation_status():
                                 # Debug output
                                 print(f"Period calculation for {member_name}: start={points_at_start}, end={points_at_end}, earned={points_earned}")
                                 
-                                # Sanity check: points earned in 90 days shouldn't exceed reasonable limits
-                                # If points_earned is unreasonably high, it suggests data corruption
-                                max_reasonable_points = 50000000  # 50M points in 90 days as sanity check
-                                if points_earned > max_reasonable_points:
-                                    # Data appears corrupted, mark as insufficient
-                                    print(f"WARNING: Unreasonably high points earned ({points_earned}), marking as insufficient data")
-                                    period_status = "insufficient_data"
-                                    points_earned = 0
-                                elif is_current_period:
+                                if is_current_period:
                                     # For current period, use time-based risk assessment (accounts for burst earning patterns)
                                     days_elapsed = max(1, (current_date - period_start).days)  # Ensure at least 1 day
                                     
@@ -1239,8 +1230,6 @@ def get_member_probation_status():
                                             period_status = "at_risk"   # Close to deadline without target
                                         else:
                                             period_status = "on_track"  # Still have time for burst activity
-                                    else:
-                                        period_status = "just_started"
                                 else:
                                     # For completed periods, simple check
                                     period_status = "compliant" if points_earned >= target_points else "non_compliant"

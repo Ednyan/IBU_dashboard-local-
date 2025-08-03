@@ -615,15 +615,25 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         non_compliant_members = [m for m in members_data if m.get('post_probation_status') == 'non_compliant']
         # Only send 'passed' notification if member is not non-compliant
         passed_members = [m for m in members_data if m.get('probation_status') == 'passed' and m.get('post_probation_status') != 'non_compliant']
-        if not failed_members:
-            print("✅ No failed members found in current data")
+        
+        # Add debug logging for all member types
+        print(f"🔍 Processing: {len(failed_members)} failed, {len(passed_members)} passed, {len(non_compliant_members)} non-compliant")
+        print(f"🔍 Passed members: {[m.get('name', 'Unknown') for m in passed_members]}")
+        
+        if not failed_members and not passed_members and not non_compliant_members:
+            print("✅ No members requiring notifications found in current data")
             if current_csv_file:
                 self.update_csv_tracking(current_csv_file)
             return
         
-        print(f"🚨 Found {len(failed_members)} failed members. Sending notifications...")
+        # Process all member types
+        print(f"📬 Processing notifications for all member types...")
         
         notifications_sent = 0
+        
+        # Process failed members
+        if failed_members:
+            print(f"🚨 Found {len(failed_members)} failed members. Sending notifications...")
         for member in failed_members:
             try:
                 member_name = member.get('name', 'Unknown')
@@ -650,49 +660,64 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             except Exception as e:
                 print(f"❌ Error notifying about {member.get('name', 'Unknown')}: {e}")
 
+        # Process passed members  
+        if passed_members:
+            print(f"🎉 Found {len(passed_members)} passed members. Sending notifications...")
         for member in passed_members:
-            member_name = member.get('name', 'Unknown')
-            notif_key = f"{member_name}"
-            prev_entry = self.notification_history.get(notif_key)
-            prev_status = prev_entry["status"] if prev_entry else None
+            try:
+                member_name = member.get('name', 'Unknown')
+                notif_key = f"{member_name}"
+                prev_entry = self.notification_history.get(notif_key)
+                prev_status = prev_entry["status"] if prev_entry else None
 
-            if not prev_entry or prev_status != "passed":
-                success = self.notify_probation_passed(member)
-                if success:
-                    print(f"🔔 Sent passed notification for {member_name}")
-            else:
-                print(f"⏭️ No status change for {member_name} (passed), not sending email.")
+                if not prev_entry or prev_status != "passed":
+                    success = self.notify_probation_passed(member)
+                    if success:
+                        notifications_sent += 1
+                        print(f"🔔 Sent passed notification for {member_name}")
+                else:
+                    print(f"⏭️ No status change for {member_name} (passed), not sending email.")
 
-            self.notification_history[notif_key] = {
-                "timestamp": datetime.now().isoformat(),
-                "member": member_name,
-                "status": "passed",
-                "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
-            }
+                self.notification_history[notif_key] = {
+                    "timestamp": datetime.now().isoformat(),
+                    "member": member_name,
+                    "status": "passed",
+                    "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
+                }
+            except Exception as e:
+                print(f"❌ Error notifying about {member.get('name', 'Unknown')}: {e}")
 
-        # Notify for non-compliant members
+        # Process non-compliant members
+        if non_compliant_members:
+            print(f"⚠️ Found {len(non_compliant_members)} non-compliant members. Sending notifications...")
         for member in non_compliant_members:
-            member_name = member.get('name', 'Unknown')
-            notif_key = f"{member_name}"
-            prev_entry = self.notification_history.get(notif_key)
-            prev_status = prev_entry["status"] if prev_entry else None
+            try:
+                member_name = member.get('name', 'Unknown')
+                notif_key = f"{member_name}"
+                prev_entry = self.notification_history.get(notif_key)
+                prev_status = prev_entry["status"] if prev_entry else None
 
-            if not prev_entry or prev_status != "non_compliant":
-                success = self.notify_non_compliant(member)
-                if success:
-                    print(f"🔔 Sent non-compliant notification for {member_name}")
-            else:
-                print(f"⏭️ No status change for {member_name} (non_compliant), not sending email.")
+                if not prev_entry or prev_status != "non_compliant":
+                    success = self.notify_non_compliant(member)
+                    if success:
+                        notifications_sent += 1
+                        print(f"🔔 Sent non-compliant notification for {member_name}")
+                else:
+                    print(f"⏭️ No status change for {member_name} (non_compliant), not sending email.")
 
-            self.notification_history[notif_key] = {
-                "timestamp": datetime.now().isoformat(),
-                "member": member_name,
-                "status": "non_compliant",
-                "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
-            }
+                self.notification_history[notif_key] = {
+                    "timestamp": datetime.now().isoformat(),
+                    "member": member_name,
+                    "status": "non_compliant",
+                    "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
+                }
+            except Exception as e:
+                print(f"❌ Error notifying about {member.get('name', 'Unknown')}: {e}")
 
         if notifications_sent > 0:
-            print(f"✅ Sent {notifications_sent} probation notifications")
+            print(f"✅ Sent {notifications_sent} total notifications")
+        else:
+            print("✅ No new notifications needed - all members already notified for current status")
 
         # Update CSV tracking after processing
         if current_csv_file:
