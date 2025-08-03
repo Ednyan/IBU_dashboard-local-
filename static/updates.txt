@@ -2,9 +2,9 @@
 # Format: VERSION|DATE|TITLE|FEATURES (separated by semicolons)
 # Use emojis for visual appeal!
 
-Current v2.3.1|August 08, 2025|Fixes|📧 Fixes to notification system|🎨 Fixes to piechart
+Current v2.3.1|August 08, 2025|Fixes|📧 Fixes to notification system;🎨 Fixes to piechart
 
-Current v2.3|July 26, 2025|Data Export & Download System|📥 Interactive CSV download with date range selection;📅 Custom datepicker modal with available data highlighting;
+v2.3|July 26, 2025|Data Export & Download System|📥 Interactive CSV download with date range selection;📅 Custom datepicker modal with available data highlighting;
 
 v2.2|July 26, 2025|Member Probation Tracking & Security System|✨ Complete probation tracking with milestone validation;📊 Post-probation compliance monitoring;🎯 Interactive member filtering system;🎨 Enhanced horizontal navigation design;📧 Automated email notification system for probation failures;🎯 Anti-spam CSV-triggered notifications with daily limits;
 
