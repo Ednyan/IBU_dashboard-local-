@@ -44,10 +44,10 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 *Modern, animated landing page with live statistics panel*
 
 ### Team Analytics
-![Points Data](static/Points_page.png)
+![Points Data](static/IBU_Points_page.png)
 *Interactive charts showing team member contributions and performance metrics*
 
-![Member Tracking](static/Member_page.png)
+![Member Tracking](static/IBU_Member_page.png)
 *Member cards showing team members status regarding probation and post-probation phases*
 
 **(IN DEVELOPMENT)**
