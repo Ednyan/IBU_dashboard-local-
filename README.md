@@ -31,11 +31,10 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 ### 🎨 **Modern User Experience**
 - **Cinematic Landing Page**: Animated particles and smooth transitions
 - **Interactive Visualizations**: Powered by Plotly for dynamic charts
-- **Real-time Updates**: Live connection status and data refresh
+- **Daily Updates**: Daily data refresh
 
 ### 🔧 **Technical Features**
-- **Automated Data Collection**: Scrapes and processes team performance data
-- **Cloud Integration**: Secure Google Drive API integration
+- **Automated Data Collection**: Scrapes and processes team performance data via cronjob
 - **Scalable Architecture**: Built with Flask for easy hosting and maintenance
 
 ## 🎭 Screenshots
@@ -45,7 +44,14 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 *Modern, animated landing page with live statistics panel*
 
 ### Team Analytics
+![Points Data](static/Points_page.png)
 *Interactive charts showing team member contributions and performance metrics*
+
+![Member Tracking](static/Member_page.png)
+*Member cards showing team members status regarding probation and post-probation phases*
+
+**(IN DEVELOPMENT)**
+*Member cards showing team members status regarding probation and post-probation phases*
 
 ## 🛠️ Technology Stack
 
@@ -61,7 +67,6 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 
 ### Prerequisites
 - Python 3.8 or higher
-- Google Service Account with Drive API access
 - SheepIt team data access
 
 ### Installation
