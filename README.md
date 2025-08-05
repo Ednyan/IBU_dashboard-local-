@@ -241,8 +241,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Links
 - [SheepIt Render Farm](https://www.sheepit-renderfarm.com/)
 - [Blender](https://www.blender.org/)
-- [Team IBU Page](https://www.sheepit-renderfarm.com/team/[team-id])
-
+- [Team IBU Page](https://www.sheepit-renderfarm.com/team/2109)
+- [I.B.U Team Discord](https://discord.com/invite/2S2WZMznVJ)
 ---
 
 <div align="center">
