@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import hashlib
 from dotenv import load_dotenv
+import time
 
 # Load environment variables
 load_dotenv()
@@ -15,6 +16,7 @@ SCRAPED_TEAM_INFO_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
 # SheepIt URLs
 LOGIN_URL = "https://www.sheepit-renderfarm.com/user/authenticate"
 TEAM_URL = os.getenv("SHEEPIT_TEAM_URL", "https://www.sheepit-renderfarm.com/team/2109")
+IBU_DASHBOARD_URL = os.getenv("IBU_DASHBOARD_URL", "")
 
 # Login credentials from environment variables
 USERNAME = os.getenv("SHEEPIT_USERNAME", "your_username_here")
@@ -144,6 +146,31 @@ def save_team_data_to_csv(team_data):
         print(f"❌ Error saving CSV file: {e}")
         return None
 
+def trigger_notifications():
+    """Trigger notification processing by calling the probation data endpoint"""
+    if not IBU_DASHBOARD_URL:
+        print("⚠️  IBU Dashboard URL not configured in .env file")
+        return False
+    
+    try:
+        
+        print(f"📧 Triggering notification processing...")
+        response = requests.get(IBU_DASHBOARD_URL, timeout=60)
+        
+        if response.status_code == 200:
+            print(f"✅ Successfully triggered notification processing")
+            return True
+        else:
+            print(f"⚠️  Notification endpoint responded with status code: {response.status_code}")
+            return False
+            
+    except requests.RequestException as e:
+        print(f"❌ Failed to trigger notifications: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Unexpected error triggering notifications: {e}")
+        return False
+
 def main():
     """Main function to run the scraper"""
     print("🚀 SheepIt Team Data Scraper - Local Version")
@@ -173,6 +200,18 @@ def main():
             print(f"📁 File saved: {csv_path}")
             print(f"📊 Records: {len(team_data)} team members")
             print("\n💡 The dashboard will automatically detect this new file within 30 seconds!")
+
+            # Wait a moment for the file to be fully written
+            time.sleep(2)
+
+            # Trigger dashboard refresh
+            notification_success = trigger_notifications()
+                
+            if notification_success:
+                print("✅ All processes completed successfully!")
+            else:
+                print("⚠️  Dashboard refresh succeeded but notification processing failed")
+            
         else:
             print("❌ Failed to save CSV file")
     else:
