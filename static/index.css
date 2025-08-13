@@ -301,7 +301,24 @@
       margin-bottom: 3rem;
       animation: logoEntrance 2s ease-out;
       position: relative;
+      /* Smooth hover rotation */
+      transition: transform 0.25s ease;
     }
+
+    /* Soft glow behind the logo using a lightweight radial gradient; animate opacity only */
+    .logo-container::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: radial-gradient(closest-side, rgba(224, 97, 80, 0.45), rgba(224, 97, 80, 0) 70%);
+      opacity: 0.35;
+      transform: translateZ(0); /* hint compositing */
+      animation: glowOpacity 4s ease-in-out 3s infinite both;
+    }
+
+  /* (Removed) container hover rotation to prevent double-rotation with image */
 
     /* Minecraft-style "NEW UPDATE" text */
     .minecraft-update-text {
@@ -362,26 +379,27 @@
       width: clamp(240px, 32vw, 420px);
       aspect-ratio: 1 / 1;
       height: auto;
-      /* Single computed transform from variables */
-      --scale: 1;
-  /* Add a slight pulse scale on idle via --pulse */
-  transform: rotate(var(--rot)) scale(calc(var(--scale) + var(--pulse)));
-      filter: drop-shadow(0 0 30px rgba(224, 97, 80, 0.3));
-  animation: rotIntro 2.4s ease-out 0.6s both, glowPulse 4s ease-in-out 3s infinite both;
-  /* Ensure both animations run by default */
-  animation-play-state: running, running;
+      /* Direct transform animation is GPU-friendly across browsers */
+      transform: scale(1);
+      filter: drop-shadow(0 0 24px rgba(224, 97, 80, 0.28));
+      /* Idle pulse: tiny scale only (no filter animation) */
+      animation: pulseScale 4s ease-in-out 3s infinite both;
       transition: transform 0.25s ease, filter 0.25s ease;
+      will-change: transform;
+      backface-visibility: hidden;
       cursor: pointer;
     }
 
-    /* Hover state (and class-based mirror): keep rotation fixed at 5deg */
-    #logo_IBU:hover,
+    /* Hover state (and class-based mirror): pause pulse and scale down; rotation handled by container */
+    .logo-container:hover #logo_IBU,
     #logo_IBU.logo-hover {
-      transform: rotate(5deg) scale(0.9);
+      transform: scale(0.9) rotate(5deg);
       filter: drop-shadow(0 0 60px rgba(224, 97, 80, 0.8));
-  /* Pause only the glowPulse while interacting; keep rotIntro unaffected */
-  animation-play-state: running, paused;
+      animation-play-state: paused;
     }
+
+    /* Pause glow behind logo while interacting */
+    .logo-container:hover::after { animation-play-state: paused; opacity: 0.6; }
 
     @keyframes logoEntrance {
       0% { 
@@ -398,22 +416,16 @@
       }
     }
 
-    /* One-time entrance: rotate into place */
-    @keyframes rotIntro {
-      0% { opacity: 0; --rot: -180deg; }
-      55% { opacity: 1; --rot: 8deg; }
-      100% { opacity: 1; --rot: 0deg; }
+    /* Idle pulse: gentle scale only for smooth compositor animation */
+    @keyframes pulseScale {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
     }
-    /* Continuous gentle glow pulse + tiny scale via --pulse */
-    @keyframes glowPulse {
-      0%, 100% {
-        --pulse: 0; /* typed via @property --pulse */
-        filter: drop-shadow(0 0 30px rgba(224, 97, 80, 0.3));
-      }
-      50% {
-        --pulse: 0.02; /* ~2% scale-up at peak */
-        filter: drop-shadow(0 0 50px rgba(224, 97, 80, 0.6));
-      }
+
+    /* Soft glow opacity pulsing (no filter animation) */
+    @keyframes glowOpacity {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 0.6; }
     }
 
     /* Content area */
