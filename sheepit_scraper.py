@@ -6,16 +6,18 @@ from datetime import datetime
 import hashlib
 from dotenv import load_dotenv
 import time
+import re
 
 # Load environment variables
 load_dotenv()
 
 # Configuration
 SCRAPED_TEAM_INFO_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
-
+SCRAPED_TEAMS_POINTS_FOLDER = os.getenv("SCRAPED_TEAMS_POINTS_FOLDER", "Scraped_Teams_Points")
 # SheepIt URLs
 LOGIN_URL = "https://www.sheepit-renderfarm.com/user/authenticate"
 TEAM_URL = os.getenv("SHEEPIT_TEAM_URL", "https://www.sheepit-renderfarm.com/team/2109")
+TEAMS_POINTS_URL = os.getenv("SHEEPIT_TEAMS_POINTS_URL", "https://www.sheepit-renderfarm.com/team")
 IBU_DASHBOARD_URL = os.getenv("IBU_DASHBOARD_URL", "")
 
 # Login credentials from environment variables
@@ -32,6 +34,114 @@ def ensure_output_folder():
     if not os.path.exists(SCRAPED_TEAM_INFO_FOLDER):
         os.makedirs(SCRAPED_TEAM_INFO_FOLDER)
         print(f"Created folder: {SCRAPED_TEAM_INFO_FOLDER}")
+    if not os.path.exists(SCRAPED_TEAMS_POINTS_FOLDER):
+        os.makedirs(SCRAPED_TEAMS_POINTS_FOLDER)
+        print(f"Created folder: {SCRAPED_TEAMS_POINTS_FOLDER}")
+
+def scrape_teams_points():
+    """Scrape aggregate teams points table (rankings) from SheepIt /team page.
+    Output structure per row: Rank, Name, 90_days, 180_days, total_points, members."""
+    print("🔄 Starting SheepIt teams points scraping...")
+    payload = {"login": USERNAME, "password": PASSWORD}
+    try:
+        with requests.session() as session:
+            login_response = session.post(LOGIN_URL, data=payload)
+            if login_response.status_code != 200:
+                print(f"❌ Login (teams points) failed with status code: {login_response.status_code}")
+                return None
+            resp = session.get(TEAMS_POINTS_URL)
+            if resp.status_code != 200:
+                print(f"❌ Failed to fetch teams points page. Status {resp.status_code}")
+                return None
+            soup = BeautifulSoup(resp.content, 'html.parser')
+            table = soup.find('table')
+            if not table:
+                print("❌ Could not find teams points table on page.")
+                return None
+            rows = table.find_all('tr')[1:]  # skip header
+            extracted = []
+            def parse_int(cell):
+                if not cell:
+                    return 0
+                txt = cell.get_text(" ", strip=True)
+                digits = re.sub(r'[^0-9]', '', txt)
+                return int(digits) if digits else 0
+
+            def get_data_sort_int(td):
+                if td is None:
+                    return 0
+                raw = td.get('data-sort')
+                if raw:
+                    try:
+                        # Keep only digits and optional decimal point then take integer part
+                        cleaned = re.sub(r'[^0-9.]', '', raw)
+                        if cleaned:
+                            return int(float(cleaned))
+                    except Exception:
+                        pass
+                return parse_int(td)
+            for row in rows:
+                cols = row.find_all('td')
+                if len(cols) < 6:
+                    continue
+                raw_rank = parse_int(cols[0])
+                if raw_rank == 0 or raw_rank > 150:
+                    # Skip empty rank rows / stop after >150
+                    if raw_rank > 150:
+                        break
+                    continue
+                name = cols[1].get_text(strip=True)
+                ninety = get_data_sort_int(cols[2])
+                one_eighty = get_data_sort_int(cols[3])
+                total_pts = get_data_sort_int(cols[4])
+                members = parse_int(cols[5])
+                extracted.append({
+                    'rank': raw_rank,
+                    'name': name,
+                    '90_days': ninety,
+                    '180_days': one_eighty,
+                    'total_points': total_pts,
+                    'members': members
+                })
+            print(f"✅ Scraped {len(extracted)} teams from rankings page")
+            return extracted
+    except requests.RequestException as e:
+        print(f"❌ Network error during teams points scraping: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ Unexpected error during teams points scraping: {e}")
+        return None
+
+def save_teams_points_to_csv(teams_points):
+    """Save teams points ranking data to CSV in SCRAPED_TEAMS_POINTS_FOLDER.
+    Columns: Date, Rank, Name, 90_days, 180_days, total_points, members"""
+    if not teams_points:
+        print("❌ No teams points data to save")
+        return None
+    ensure_output_folder()
+    now = datetime.now()
+    date_str = now.strftime('%Y-%m-%d')
+    filename = f"sheepit_teams_points_{date_str}.csv"
+    path = os.path.join(SCRAPED_TEAMS_POINTS_FOLDER, filename)
+    try:
+        with open(path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Date','Rank','Name','90_days','180_days','total_points','members'])
+            for row in teams_points:
+                writer.writerow([
+                    date_str,
+                    row['rank'],
+                    row['name'],
+                    row['90_days'],
+                    row['180_days'],
+                    row['total_points'],
+                    row['members']
+                ])
+        print(f"💾 Saved teams points rankings to {path}")
+        return path
+    except Exception as e:
+        print(f"❌ Error saving teams points CSV: {e}")
+        return None
 
 def scrape_team_data():
     """Scrape team data from SheepIt renderfarm"""
@@ -187,35 +297,38 @@ def main():
         print("Linux/Mac: export SHEEPIT_USERNAME=your_username && export SHEEPIT_PASSWORD=your_password")
         return
     
-    # Scrape team data
+    # Scrape team member points page
     team_data = scrape_team_data()
-    
     if team_data:
-        # Save to CSV
-        csv_path = save_team_data_to_csv(team_data)
-        
-        if csv_path:
-            print("=" * 50)
-            print("🎉 Scraping completed successfully!")
-            print(f"📁 File saved: {csv_path}")
-            print(f"📊 Records: {len(team_data)} team members")
-            print("\n💡 The dashboard will automatically detect this new file within 30 seconds!")
-
-            # Wait a moment for the file to be fully written
-            time.sleep(2)
-
-            # Trigger dashboard refresh
-            notification_success = trigger_notifications()
-                
-            if notification_success:
-                print("✅ All processes completed successfully!")
-            else:
-                print("⚠️  Dashboard refresh succeeded but notification processing failed")
-            
-        else:
-            print("❌ Failed to save CSV file")
+        members_csv_path = save_team_data_to_csv(team_data)
     else:
-        print("❌ Failed to scrape team data")
+        members_csv_path = None
+
+    # Scrape teams rankings page
+    teams_points = scrape_teams_points()
+    if teams_points:
+        rankings_csv_path = save_teams_points_to_csv(teams_points)
+    else:
+        rankings_csv_path = None
+
+    success_any = bool(members_csv_path or rankings_csv_path)
+    if success_any:
+        print("=" * 50)
+        print("🎉 Scraping run summary")
+        if members_csv_path:
+            print(f"• Members file: {members_csv_path} ({len(team_data)} rows)")
+        if rankings_csv_path:
+            print(f"• Rankings file: {rankings_csv_path} ({len(teams_points)} rows)")
+        print("\n💡 The dashboard will automatically detect new member file(s) within 30 seconds.")
+        # Slight delay then trigger dashboard refresh (only once)
+        time.sleep(2)
+        notification_success = trigger_notifications()
+        if notification_success:
+            print("✅ All processes completed successfully!")
+        else:
+            print("⚠️ Dashboard refresh request failed or not configured")
+    else:
+        print("❌ No data scraped successfully (members or rankings)")
 
 if __name__ == "__main__":
     main()

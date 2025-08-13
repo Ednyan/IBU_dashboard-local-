@@ -4,6 +4,9 @@
   <title>I.B.U Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Preload critical images to avoid late layout shifts -->
+  <link rel="preload" as="image" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
+  <link rel="preload" as="image" href="{{ url_for('static', filename='IBU_text.svg') }}">
   <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='index.css') }}?v={{ range(1000, 9999) | random }}">
 </head>
 <body>
@@ -29,29 +32,39 @@
 
   <!-- Floating Toggle Button -->
   <button class="sidebar-toggle-floating" id="floating-toggle">📋</button>
+  <!-- Floating Discord Button -->
+  <a class="discord-toggle-floating" href="https://discord.com/invite/2S2WZMznVJ" target="_blank" rel="noopener" aria-label="Join I.B.U Discord">
+    <img src="{{ url_for('static', filename='discord-icon.svg') }}" alt="Discord" />
+  </a>
 
   <!-- Main landing container -->
   <div class="landing-container" id="main-container">
     <!-- Logo section -->
     <div class="logo-container">
       <!-- Minecraft-style "NEW UPDATE" text -->
-      <div class="minecraft-update-text">New Update! <br> Now we are watching you!</div>
-      <img id="logo_IBU" src="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}" alt="IBU Logo">
+      <div class="minecraft-update-text">Now with Trends! <br> Team performance, Wall Street style!</div>
+  <img id="logo_IBU" src="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}" alt="IBU Logo" width="400" height="400" decoding="async" loading="eager">
     </div>
 
     <!-- Content area -->
     <div class="content-area">
-      <img id="IBU_text" src="{{ url_for('static', filename='IBU_text.svg') }}" alt="IBU Logo">
+  <img id="IBU_text" src="{{ url_for('static', filename='IBU_text.svg') }}" alt="IBU Text" width="600" height="150" decoding="async" loading="eager">
       <!-- Main action button -->
-      <div style="display: inline-flex;">
-        <a href="{{ url_for('visualization') }}" class="hero-button" style="margin-left: 1rem; margin-right: 1rem;">
+      <div style="display: inline-flex; flex-wrap: wrap; justify-content: center;">
+        <a href="{{ url_for('visualization') }}" class="hero-button" style="margin-left: 1rem; margin-right: 1rem; margin-bottom: 1rem;">
           Team Data Analysis
         </a>
-        
+
+        <!-- Trends Analysis button -->
+        <a href="{{ url_for('trends') }}" class="hero-button" style="background: linear-gradient(135deg, #66afea 0%, #4b5ba2 100%); margin-left: 1rem; margin-right: 1rem; margin-bottom: 1rem;">
+          Trends Analysis
+        </a>
+
         <!-- Member Info button -->
-        <a href="{{ url_for('member_info') }}" class="hero-button" style="margin-top: 0px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);margin-left: 1rem; margin-right: 1rem;"">
+        <a href="{{ url_for('member_info') }}" class="hero-button" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin-left: 1rem; margin-right: 1rem; margin-bottom: 1rem;">
           Member Tracking
         </a>
+        
       </div>
       <!-- Information section -->
       <div class="info-container">
@@ -208,7 +221,7 @@
     }
 
     // Initialize particles when page loads
-    document.addEventListener('DOMContentLoaded', function() {
+  document.addEventListener('DOMContentLoaded', function() {
       // Initialize sidebar functionality
       initSidebar();
       
@@ -235,6 +248,11 @@
       }
       
       createParticles();
+      // Lock landing container layout after initial paint to avoid re-centering jitter
+      requestAnimationFrame(() => {
+        const lc = document.querySelector('.landing-container');
+        if (lc) lc.classList.add('stabilized');
+      });
       
       // Debug: Force stats panel visibility
       const statsPanel = document.getElementById('stats-panel');
@@ -281,15 +299,12 @@
       
       let isExpanded = false;
       
-      // Logo hover effects
+      // Logo hover effects (class-based to ensure consistent reset)
       logo.addEventListener('mouseenter', function() {
-        this.style.transform = 'scale(0.9) rotate(5deg)';
-        this.style.filter = 'drop-shadow(0 0 60px rgba(224, 97, 80, 0.8))';
+        this.classList.add('logo-hover');
       });
-      
       logo.addEventListener('mouseleave', function() {
-        this.style.transform = 'scale(0.8) rotate(0deg)';
-        this.style.filter = 'drop-shadow(0 0 30px rgba(224, 97, 80, 0.3))';
+        this.classList.remove('logo-hover');
       });
       
       // Logo click functionality with toggle
@@ -321,14 +336,14 @@
 This dashboard provides daily insights into team data, allowing you to:<br><br>
 
 • Track team members points<br>
-• Analyze performance metrics over time (in development)<br>
+• Analyze performance metrics over time<br>
 • See individual team member contributions<br>
 • Export data for further analysis<br><br>
 
 The system automatically scrapes and updates team information, ensuring you always have the latest data at your fingertips.<br><br>
 
-Click the button below to explore the interactive visualizations and dive deep into your team's data.`;
-            
+For more information, join the our <a href="https://discord.com/invite/2S2WZMznVJ" target="_blank" style="color: rgba(224, 97, 80, 1); text-decoration: none;">I.B.U. Discord Server</a> !`;
+
             // Trigger title fade-in (first)
             setTimeout(() => {
               titleElement.classList.add('fade-in');
@@ -423,13 +438,13 @@ Click the button below to explore the interactive visualizations and dive deep i
 This dashboard provides daily insights into team data, allowing you to:
 
 • Track team members points
-• Analyze performance metrics over time (in development)
+• Analyze performance metrics over time
 • See individual team member contributions
 • Export data for further analysis
 
 The system automatically scrapes and updates team information, ensuring you always have the latest data at your fingertips.
 
-Click the button below to explore the interactive visualizations and dive deep into your team's data.`;
+For more information, join the our <a href="https://discord.com/invite/2S2WZMznVJ" target="_blank" style="color: rgba(224, 97, 80, 1); text-decoration: none;">I.B.U. Discord Server</a> !`;
         
         // Set text content immediately
         typewriterText.innerHTML = text.replace(/\n/g, '<br>');

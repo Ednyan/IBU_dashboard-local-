@@ -1,4 +1,15 @@
 /* New modern landing page styles */
+    /* Typed custom properties for smooth animation */
+    @property --rot {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @property --pulse {
+      syntax: '<number>';
+      initial-value: 0;
+      inherits: false;
+    }
     body {
       margin: 0;
       padding: 0;
@@ -228,21 +239,53 @@
       display: none;
     }
 
+    /* Discord Floating Button (next to left update button) */
+    .discord-toggle-floating {
+      position: fixed;
+      top: 20px;
+      left: calc(20px + 45px + 12px); /* left button left + width + gap */
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 99;
+      background: linear-gradient(135deg, rgba(224, 97, 80, 0.9) 0%, rgba(255, 122, 107, 0.9) 100%);
+      box-shadow: 0 4px 15px rgba(224, 97, 80, 0.4);
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+      text-decoration: none;
+    }
+    .discord-toggle-floating:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(224, 97, 80, 0.6);
+    }
+    .discord-toggle-floating img {
+      width: 24px;
+      height: 24px;
+      display: block;
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
+    }
+
     /* Main container */
     .landing-container {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      /* Remove live vertical centering to avoid shift during asset load */
+      justify-content: flex-start;
       min-height: 100vh;
       position: relative;
       z-index: 2;
-      padding: 2rem;
+      padding: clamp(2rem, 8vh, 5rem) 2rem 2rem;
       width: 100%;
-      box-sizing: border-box; /* Add this to prevent overflow */
+      box-sizing: border-box;
       transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
                   margin-left 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
+    /* After stabilization keep layout static */
+    .landing-container.stabilized { will-change: auto; }
 
     .landing-container.slide-left {
       transform: translateX(-20%);
@@ -264,7 +307,7 @@
     .minecraft-update-text {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       text-align: center;
-      font-size: 1.35rem;
+      font-size: 1.2rem;
       font-weight: bold;
       color: #ffffff;
       text-shadow: 
@@ -316,16 +359,28 @@
     }
 
     #logo_IBU {
-      width: 40vh;
+      width: clamp(240px, 32vw, 420px);
+      aspect-ratio: 1 / 1;
+      height: auto;
+      /* Single computed transform from variables */
+      --scale: 1;
+  /* Add a slight pulse scale on idle via --pulse */
+  transform: rotate(var(--rot)) scale(calc(var(--scale) + var(--pulse)));
       filter: drop-shadow(0 0 30px rgba(224, 97, 80, 0.3));
-      animation: logoScale 3s ease-out 1s both, logoPulse 4s ease-in-out 1s infinite;
-      transition: all 0.3s ease;
+  animation: rotIntro 2.4s ease-out 0.6s both, glowPulse 4s ease-in-out 3s infinite both;
+  /* Ensure both animations run by default */
+  animation-play-state: running, running;
+      transition: transform 0.25s ease, filter 0.25s ease;
       cursor: pointer;
     }
 
-    #logo_IBU:hover {
-      transform: scale(0.9) rotate(5deg);
+    /* Hover state (and class-based mirror): keep rotation fixed at 5deg */
+    #logo_IBU:hover,
+    #logo_IBU.logo-hover {
+      transform: rotate(5deg) scale(0.9);
       filter: drop-shadow(0 0 60px rgba(224, 97, 80, 0.8));
+  /* Pause only the glowPulse while interacting; keep rotIntro unaffected */
+  animation-play-state: running, paused;
     }
 
     @keyframes logoEntrance {
@@ -343,14 +398,21 @@
       }
     }
 
-    @keyframes logoPulse {
-      0%, 100% { 
+    /* One-time entrance: rotate into place */
+    @keyframes rotIntro {
+      0% { opacity: 0; --rot: -180deg; }
+      55% { opacity: 1; --rot: 8deg; }
+      100% { opacity: 1; --rot: 0deg; }
+    }
+    /* Continuous gentle glow pulse + tiny scale via --pulse */
+    @keyframes glowPulse {
+      0%, 100% {
+        --pulse: 0; /* typed via @property --pulse */
         filter: drop-shadow(0 0 30px rgba(224, 97, 80, 0.3));
-        transform: scale(1);
       }
-      50% { 
+      50% {
+        --pulse: 0.02; /* ~2% scale-up at peak */
         filter: drop-shadow(0 0 50px rgba(224, 97, 80, 0.6));
-        transform: scale(0.95);
       }
     }
 

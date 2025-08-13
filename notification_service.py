@@ -126,7 +126,7 @@ class NotificationService:
         if milestones.get('week_1', {}).get('passed') == False:
             failed_milestones.append("First Week (250K points)")
         if milestones.get('month_1', {}).get('passed') == False:
-            failed_milestones.append("First Month (1.5M points)")
+            failed_milestones.append("First Month (1M points)")
         if milestones.get('month_3', {}).get('passed') == False:
             failed_milestones.append("Three Months (3M points)")
         
@@ -178,7 +178,7 @@ class NotificationService:
         # Add milestone details
         milestone_order = [
             ('week_1', 'First Week', '250K points'),
-            ('month_1', 'First Month', '1.5M points'),
+            ('month_1', 'First Month', '1M points'),
             ('month_3', 'Three Months', '3M points')
         ]
         
@@ -281,7 +281,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             if milestones.get('week_1', {}).get('passed') == False:
                 failed_milestones.append("First Week (250K points)")
             if milestones.get('month_1', {}).get('passed') == False:
-                failed_milestones.append("First Month (1.5M points)")
+                failed_milestones.append("First Month (1M points)")
             if milestones.get('month_3', {}).get('passed') == False:
                 failed_milestones.append("Three Months (3M points)")
             
@@ -331,7 +331,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             # Add milestone details
             milestone_order = [
                 ('week_1', 'First Week', '250K points'),
-                ('month_1', 'First Month', '1.5M points'),
+                ('month_1', 'First Month', '1M points'),
                 ('month_3', 'Three Months', '3M points')
             ]
             

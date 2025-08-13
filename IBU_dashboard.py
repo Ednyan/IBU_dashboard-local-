@@ -29,17 +29,70 @@ except ImportError as e:
 
 # Use local data folder
 DATA_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
+# Additional folder for scraped team rankings (top 150 teams with multiple metrics)
+TEAMS_POINTS_FOLDER = os.getenv("SCRAPED_TEAMS_POINTS_FOLDER", "Scraped_Teams_Points")
 
 progress_queue = queue.Queue()
 layout_height = 550
-layout_width = 1000
-aspect_ratio = layout_height / layout_width
+layout_width = 1000  # aspect_ratio variable removed (unused)
 
 def name_to_color(name):
     # Hash the name to get a consistent value
     hash_object = hashlib.md5(name.encode())
     hex_color = "#" + hash_object.hexdigest()[:6]
     return hex_color
+
+def _hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 3:
+        hex_color = ''.join(c*2 for c in hex_color)
+    try:
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return r, g, b
+    except Exception:
+        return 128, 128, 128
+
+def blend_with(color_hex, base_rgb, alpha=0.5):
+    """Blend a member color (hex) with a base RGB tuple (e.g. green or red) by alpha.
+    alpha: portion of base color; (1-alpha) of member color.
+    Returns hex string."""
+    mr, mg, mb = _hex_to_rgb(color_hex)
+    br, bg, bb = base_rgb
+    r = int(mr*(1-alpha) + br*alpha)
+    g = int(mg*(1-alpha) + bg*alpha)
+    b = int(mb*(1-alpha) + bb*alpha)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+# --- Normalization Helpers -------------------------------------------------
+def normalize_member_points_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of df with unified 'Member' and 'Points' columns.
+    Accepts any of: 'Member'/'member'/'name' for member column and
+    'Points'/'points' for points column. Leaves original DF otherwise.
+    """
+    try:
+        if df is None or df.empty:
+            return df
+        # Strip whitespace and work case-insensitively
+        df = df.copy()
+        df.columns = df.columns.str.strip()
+        lower_map = {c.lower(): c for c in df.columns}
+        rename_map = {}
+        # Member/name
+        if 'member' in lower_map:
+            rename_map[lower_map['member']] = 'Member'
+        elif 'name' in lower_map:
+            rename_map[lower_map['name']] = 'Member'
+        # Points
+        if 'points' in lower_map:
+            rename_map[lower_map['points']] = 'Points'
+        if rename_map:
+            df = df.rename(columns=rename_map)
+        return df
+    except Exception as e:
+        print(f"normalize_member_points_columns error: {e}")
+        return df
 
 def get_csv_files_from_folder():
     """
@@ -61,6 +114,42 @@ def get_csv_files_from_folder():
     except Exception as e:
         print(f"Error getting CSV files from folder: {str(e)}")
         return []
+
+def get_team_points_files_from_folder():
+    """Return list of team rankings CSV files (sheepit_teams_points_YYYY-MM-DD.csv) sorted ascending by date."""
+    try:
+        if not os.path.exists(TEAMS_POINTS_FOLDER):
+            return []
+        pattern = os.path.join(TEAMS_POINTS_FOLDER, "sheepit_teams_points_*.csv")
+        csv_files = glob.glob(pattern)
+        csv_files.sort()
+        return csv_files
+    except Exception as e:
+        print(f"Error getting team rankings files: {e}")
+        return []
+
+# --- Team name normalization / sanitization helpers (for robust matching) ----
+def _sanitize_team_name(name: str) -> str:
+    """Return a simplified version of a team name for fuzzy-ish matching.
+    - Lowercase
+    - Strip spaces
+    - Remove punctuation & emoji / non-word chars
+    - Collapse multiple spaces
+    This keeps alphanumerics + basic periods removed to avoid subtle differences.
+    """
+    try:
+        if name is None:
+            return ''
+        # Normalize unicode form
+        import unicodedata, re as _re
+        n = unicodedata.normalize('NFKC', str(name)).lower()
+        # Replace non-alphanumeric with space
+        n = _re.sub(r'[^a-z0-9]+', ' ', n)
+        # Collapse spaces
+        n = ' '.join(n.split())
+        return n
+    except Exception:
+        return str(name).strip().lower()
 
 def get_latest_csv_file():
     """
@@ -1660,6 +1749,1037 @@ def download_csv_files():
     except Exception as e:
         print(f"Error creating CSV download: {str(e)}")
         return jsonify({"error": f"Failed to create download: {str(e)}"}), 500
+
+@app.route('/trends')
+def trends():
+    """Render the trends analysis page with consistent header metadata"""
+    latest_file, latest_date_str, file_timestamp = get_latest_csv_file()
+    time_ago = get_time_ago_string(file_timestamp) if file_timestamp else "Recently"
+    return render_template('trends.html', time_ago=time_ago, latest_date=latest_date_str or "-")
+
+@app.route('/api/trends/members')
+def api_trends_members():
+    """Return available members (from most recent CSV), earliest & latest dates."""
+    try:
+        file_paths = get_csv_files_from_folder()
+        if not file_paths:
+            return jsonify({"success": False, "error": "No CSV files found"}), 404
+
+        # Build structured list with parsed dates
+        file_infos = []
+        for p in file_paths:
+            fname = os.path.basename(p)
+            m = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+            if not m:
+                continue
+            try:
+                parsed_date = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            file_infos.append({'path': p, 'filename': fname, 'parsed_date': parsed_date})
+
+        if not file_infos:
+            return jsonify({"success": False, "error": "No parsable CSV filenames"}), 404
+
+        # Latest file by date
+        latest_info = max(file_infos, key=lambda x: x['parsed_date'])
+        earliest_info = min(file_infos, key=lambda x: x['parsed_date'])
+
+        df = pd.read_csv(latest_info['path'])
+        df = normalize_member_points_columns(df)
+
+        members = []
+        for _, row in df.iterrows():
+            member_name = row.get('Member', '') or row.get('Name', '')
+            if not member_name:
+                continue
+            points_val = row.get('Points', 0)
+            try:
+                points_int = int(points_val) if pd.notna(points_val) else 0
+            except Exception:
+                points_int = 0
+            members.append({
+                'name': str(member_name),
+                'current_points': points_int
+            })
+
+        members.sort(key=lambda x: x['current_points'], reverse=True)
+
+        return jsonify({
+            "success": True,
+            "members": members,
+            "latest_date": latest_info['parsed_date'].strftime('%Y-%m-%d'),
+            "earliest_date": earliest_info['parsed_date'].strftime('%Y-%m-%d'),
+            "member_count": len(members)
+        })
+    except Exception as e:
+        print(f"Error getting members list: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/trends/teams')
+def api_trends_teams():
+    """Return available teams (from most recent rankings CSV) with current metrics."""
+    try:
+        files = get_team_points_files_from_folder()
+        if not files:
+            return jsonify({"success": False, "error": "No team rankings files found"}), 404
+        file_infos = []
+        for p in files:
+            fname = os.path.basename(p)
+            m = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+            if not m:
+                continue
+            try:
+                parsed_date = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            file_infos.append({'path': p, 'filename': fname, 'parsed_date': parsed_date})
+        if not file_infos:
+            return jsonify({"success": False, "error": "No parsable rankings filenames"}), 404
+        latest = max(file_infos, key=lambda x: x['parsed_date'])
+        earliest = min(file_infos, key=lambda x: x['parsed_date'])
+        df = pd.read_csv(latest['path'])
+        teams = []
+        for _, row in df.iterrows():
+            name = str(row.get('Name', '')).strip()
+            if not name:
+                continue
+            def _get_int(col):
+                try:
+                    return int(row.get(col, 0)) if pd.notna(row.get(col, 0)) else 0
+                except Exception:
+                    return 0
+            teams.append({
+                'name': name,
+                'total_points': _get_int('total_points'),
+                'members': _get_int('members'),
+                '90_days': _get_int('90_days'),
+                '180_days': _get_int('180_days')
+            })
+        teams.sort(key=lambda x: x['total_points'], reverse=True)
+        return jsonify({
+            'success': True,
+            'teams': teams,
+            'latest_date': latest['parsed_date'].strftime('%Y-%m-%d'),
+            'earliest_date': earliest['parsed_date'].strftime('%Y-%m-%d'),
+            'team_count': len(teams)
+        })
+    except Exception as e:
+        print(f"Error getting teams list: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/trends/data')
+def api_trends_data():
+    """Return trend time-series data, with optional aggregation & predictions."""
+    # Parse requested series (comma separated in 'series' param)
+    series_param = request.args.get('series', '')
+    series_list = [s.strip() for s in series_param.split(',') if s.strip()]
+
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    chart_type = request.args.get('chart_type', 'line')
+    time_period = request.args.get('time_period', 'daily')
+    predictions_enabled = request.args.get('predictions', 'false').lower() == 'true'
+    prediction_method = request.args.get('prediction_method', 'linear')
+    prediction_days = int(request.args.get('prediction_days', '30'))
+    value_mode = request.args.get('value_mode', 'cumulative')  # 'cumulative' or 'interval'
+    fill_lines = request.args.get('fill_lines', 'true').lower() == 'true'
+    team_metric = request.args.get('team_metric', 'total_points')  # total_points|members|90_days|180_days
+    hide_first_interval = request.args.get('hide_first_interval', 'false').lower() == 'true'
+    hide_first_interval = True
+    original_series_list = list(series_list)
+    # Separate team series (prefixed with team:) from member series
+    team_series_requested = []
+    member_series = []
+    for s in series_list:
+        if s.lower().startswith('team:'):
+            team_series_requested.append(s[5:].strip())
+        else:
+            member_series.append(s)
+    series_list = member_series
+
+    file_paths = get_csv_files_from_folder()
+    if not file_paths:
+        return jsonify({"success": False, "error": "No data files available"}), 404
+
+    # Build structured list (date parsing only once)
+    file_infos = []
+    for p in file_paths:
+        fname = os.path.basename(p)
+        m = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+        if not m:
+            continue
+        try:
+            parsed_date = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        file_infos.append({'path': p, 'filename': fname, 'parsed_date': parsed_date})
+
+    if not file_infos:
+        return jsonify({"success": False, "error": "No parsable data files"}), 404
+
+    # Date filtering
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+            file_infos = [f for f in file_infos if f['parsed_date'] >= start_dt]
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid start_date"}), 400
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+            file_infos = [f for f in file_infos if f['parsed_date'] <= end_dt]
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid end_date"}), 400
+
+    if not file_infos:
+        return jsonify({"success": False, "error": "No files in selected range"}), 404
+
+    file_infos.sort(key=lambda x: x['parsed_date'])
+
+    # Collect daily data
+    daily_data = {name: {'dates': [], 'points': [], 'daily_change': [], 'rank': []} for name in series_list if name != 'total'}
+    # 'total' handled separately
+    total_series_needed = 'total' in series_list
+    total_data = {'dates': [], 'points': [], 'daily_change': []} if total_series_needed else None
+
+    last_points_tracker = {name: None for name in daily_data.keys()}
+    last_total_points = None
+
+    for info in file_infos:
+        try:
+                df = pd.read_csv(info['path'])
+                df = normalize_member_points_columns(df)
+        except Exception as e:
+            print(f"Failed reading {info['path']}: {e}")
+            continue
+        date_label = info['parsed_date'].strftime('%Y-%m-%d')
+
+        # Total points (sum Points column) if needed
+        if total_series_needed:
+            total_points_value = 0
+            if 'Points' in df.columns:
+                try:
+                    total_points_value = int(df['Points'].fillna(0).astype(int).sum())
+                except Exception:
+                    total_points_value = int(df['Points'].fillna(0).sum())
+            total_data['dates'].append(date_label)
+            total_data['points'].append(total_points_value)
+            if last_total_points is not None:
+                total_data['daily_change'].append(total_points_value - last_total_points)
+            else:
+                total_data['daily_change'].append(0)
+            last_total_points = total_points_value
+
+        # Individual members
+        for member_name in daily_data.keys():
+            # Find row
+            member_row = None
+            for _, row in df.iterrows():
+                row_name = row.get('Name', str(row.get('Member', '')))
+                row_name = str(row_name).strip()
+                if row_name == member_name:
+                    member_row = row
+                    break
+            points_val = 0
+            rank_val = 0
+            if member_row is not None:
+                try:
+                    points_val = int(member_row.get('Points', 0)) if pd.notna(member_row.get('Points', 0)) else 0
+                except Exception:
+                    points_val = 0
+                try:
+                    rank_val = int(member_row.get('Rank', 0)) if pd.notna(member_row.get('Rank', 0)) else 0
+                except Exception:
+                    rank_val = 0
+            # Append
+            daily_member = daily_data[member_name]
+            daily_member['dates'].append(date_label)
+            daily_member['points'].append(points_val)
+            daily_member['rank'].append(rank_val)
+            if last_points_tracker[member_name] is not None:
+                daily_member['daily_change'].append(points_val - last_points_tracker[member_name])
+            else:
+                daily_member['daily_change'].append(0)
+            last_points_tracker[member_name] = points_val
+
+    # Combine into trends_data structure
+
+    trends_data = {}
+    if total_series_needed:
+        trends_data['Total Team Points'] = {  # Display label different from param 'total'
+            'dates': total_data['dates'],
+            'points': total_data['points'],
+            'daily_change': total_data['daily_change'],
+            # Provide rank list of zeros so aggregation logic doesn't index error
+            'rank': [0]*len(total_data['dates'])
+        }
+    for k, v in daily_data.items():
+        trends_data[k] = v
+
+    # --- Team rankings integration -------------------------------------------------
+    if team_series_requested:
+        team_files = get_team_points_files_from_folder()
+        if team_files:
+            team_file_infos = []
+            for p in team_files:
+                fname = os.path.basename(p)
+                m2 = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+                if not m2:
+                    continue
+                try:
+                    parsed_date = datetime.strptime(m2.group(1), '%Y-%m-%d').date()
+                except ValueError:
+                    continue
+                # Respect date filters
+                if start_date:
+                    try:
+                        sd = datetime.strptime(start_date, '%Y-%m-%d').date()
+                        if parsed_date < sd:
+                            continue
+                    except Exception:
+                        pass
+                if end_date:
+                    try:
+                        ed = datetime.strptime(end_date, '%Y-%m-%d').date()
+                        if parsed_date > ed:
+                            continue
+                    except Exception:
+                        pass
+                team_file_infos.append({'path': p, 'parsed_date': parsed_date})
+            team_file_infos.sort(key=lambda x: x['parsed_date'])
+            team_data_struct = {t: {'dates': [], 'points': [], 'daily_change': [], 'rank': []} for t in team_series_requested}
+            last_vals = {t: None for t in team_series_requested}
+            for info in team_file_infos:
+                try:
+                    df_team = pd.read_csv(info['path'])
+                except Exception as e:
+                    print(f"Failed reading team rankings {info['path']}: {e}")
+                    continue
+                date_label = info['parsed_date'].strftime('%Y-%m-%d')
+                # Build normalized name map once per file for robust matching
+                try:
+                    df_team['_norm_name'] = df_team['Name'].astype(str).str.strip().str.lower()
+                except Exception:
+                    df_team['_norm_name'] = ''
+                # Pre-compute sanitized names
+                try:
+                    df_team['_san_name'] = df_team['Name'].apply(_sanitize_team_name)
+                except Exception:
+                    df_team['_san_name'] = df_team['_norm_name']
+                debug_team_matching = []
+                for tname in team_series_requested:
+                    target_norm = tname.strip().lower()
+                    target_san = _sanitize_team_name(tname)
+                    # 1. Exact norm
+                    row = df_team[df_team['_norm_name'] == target_norm]
+                    # 2. Exact sanitized
+                    if row.empty:
+                        row = df_team[df_team['_san_name'] == target_san]
+                    # 3. Startswith norm (first 12 chars)
+                    if row.empty:
+                        cand = df_team[df_team['_norm_name'].str.startswith(target_norm[:12])]
+                        if len(cand) == 1:
+                            row = cand
+                    # 4. Startswith sanitized (first 12 chars)
+                    if row.empty:
+                        cand2 = df_team[df_team['_san_name'].str.startswith(target_san[:12])]
+                        if len(cand2) == 1:
+                            row = cand2
+                    # 5. Contains sanitized token (rare fallback) - pick first smallest rank
+                    if row.empty and target_san:
+                        subset = df_team[df_team['_san_name'].str.contains(target_san.split(' ')[0], na=False)]
+                        if len(subset) == 1:
+                            row = subset
+                        elif len(subset) > 1:
+                            # choose row with minimal rank value if available
+                            try:
+                                subset_numeric = subset.copy()
+                                subset_numeric['__rk'] = pd.to_numeric(subset_numeric.get('Rank'), errors='coerce').fillna(999999)
+                                row = subset_numeric.sort_values('__rk').head(1)
+                            except Exception:
+                                row = subset.head(1)
+                    if row.empty:
+                        debug_team_matching.append({
+                            'requested': tname,
+                            'target_norm': target_norm,
+                            'target_san': target_san,
+                            'status': 'not_found'
+                        })
+                        continue
+                    r = row.iloc[0]
+                    def _metric_value(col):
+                        try:
+                            return int(r.get(col, 0)) if pd.notna(r.get(col, 0)) else 0
+                        except Exception:
+                            return 0
+                    if team_metric == 'members':
+                        val = _metric_value('members')
+                    elif team_metric == '90_days':
+                        val = _metric_value('90_days')
+                    elif team_metric == '180_days':
+                        val = _metric_value('180_days')
+                    else:
+                        val = _metric_value('total_points')
+                    try:
+                        rk = int(r.get('Rank', 0)) if pd.notna(r.get('Rank', 0)) else 0
+                    except Exception:
+                        rk = 0
+                    entry = team_data_struct[tname]
+                    entry['dates'].append(date_label)
+                    entry['points'].append(val)
+                    if last_vals[tname] is None:
+                        entry['daily_change'].append(0)
+                    else:
+                        entry['daily_change'].append(max(0, val - last_vals[tname]))
+                    entry['rank'].append(rk)
+                    last_vals[tname] = val
+                    debug_team_matching.append({
+                        'requested': tname,
+                        'target_norm': target_norm,
+                        'target_san': target_san,
+                        'matched_name': str(r.get('Name')),
+                        'date': date_label,
+                        'value': val,
+                        'rank': rk
+                    })
+                if debug_team_matching:
+                    # Print once per file to avoid log spam
+                    print(f"[TEAM_MATCH_DEBUG] file={info['path']} entries={debug_team_matching}")
+            for tname, tdata in team_data_struct.items():
+                if tdata['dates']:
+                    # Prefix to distinguish from member names
+                    trends_data[f"Team: {tname}"] = tdata
+    # Track which dates originally existed (before gap fill) for interval production distribution
+    for series_name, sdata in trends_data.items():
+        sdata['observed_dates'] = set(sdata['dates'])
+
+    # Fill missing daily dates (forward-fill points) to avoid gaps in daily view
+    if time_period == 'daily':
+        trends_data = fill_missing_daily_dates(trends_data)
+
+    # Snapshot raw daily points & compute raw daily produced (before aggregation & before interval transformation)
+    for series_name, sdata in trends_data.items():
+        pts = sdata.get('points', [])
+        daily_prod = []
+        prev = None
+        for p in pts:
+            if prev is None:
+                daily_prod.append(0)
+            else:
+                daily_prod.append(max(0, p - prev))
+            prev = p
+        sdata['daily_points_raw'] = list(pts)
+        sdata['daily_dates_raw'] = list(sdata.get('dates', []))
+        sdata['daily_produced_raw'] = daily_prod
+
+    # Aggregate if needed
+    if time_period != 'daily':
+        trends_data = aggregate_time_period(trends_data, time_period)
+
+    # Convert to interval production if requested (replace points with per-period produced)
+    if value_mode == 'interval':
+        for series_name, sdata in trends_data.items():
+            pts = sdata.get('points', [])
+            dates = sdata.get('dates', [])
+            produced = [0]*len(pts)
+            if not pts:
+                sdata['produced'] = produced
+                continue
+            # Daily: distribute delta across gaps between real observations
+            if time_period == 'daily':
+                observed = sdata.get('observed_dates', set())
+                last_real_index = None
+                last_real_points = None
+                for idx, (d_str, p_val) in enumerate(zip(dates, pts)):
+                    if d_str in observed:
+                        if last_real_index is None:
+                            # First observation: set produced to 0 to avoid huge spike (user preference)
+                            produced[idx] = 0
+                            last_real_index = idx
+                            last_real_points = p_val
+                            continue
+                        # Compute gap span (number of days between observations)
+                        gap_days = idx - last_real_index
+                        delta = max(0, p_val - last_real_points) if last_real_points is not None else 0
+                        if gap_days <= 0:
+                            last_real_index = idx
+                            last_real_points = p_val
+                            continue
+                        # Even distribution across gap_days (includes current real day)
+                        # Example: real at i0=0 and i1=2 (gap_days=2) -> distribute across indices 1 and 2
+                        per_day = delta // gap_days if gap_days > 0 else 0
+                        remainder = delta - per_day * gap_days
+                        for j in range(1, gap_days+1):
+                            target_index = last_real_index + j
+                            add_val = per_day + (remainder if j == gap_days else 0)  # put remainder on last real day
+                            produced[target_index] = add_val
+                        last_real_index = idx
+                        last_real_points = p_val
+                sdata['produced'] = produced
+            else:
+                # Aggregated periods: simple difference period-over-period
+                prev = None
+                for i, p in enumerate(pts):
+                    if prev is None:
+                        # First aggregated period produced = 0 (avoid giant first bar)
+                        produced[i] = 0
+                    else:
+                        produced[i] = max(0, p - prev)
+                    prev = p
+                sdata['produced'] = produced
+        # produced now holds per-day estimated production (distributed over gaps)
+
+        # Optional: remove the first interval point entirely if requested (hide_first_interval=true)
+        if hide_first_interval:
+            for sname, sdata in trends_data.items():
+                if len(sdata.get('dates', [])) > 1:
+                    for key in ['dates','points','daily_change','rank','produced','daily_points_raw','daily_produced_raw','daily_dates_raw']:
+                        if key in sdata and isinstance(sdata[key], list) and len(sdata[key]) > 1:
+                            sdata[key] = sdata[key][1:]
+                    # observed_dates is a set; remove first date if present
+                    if 'observed_dates' in sdata and isinstance(sdata['observed_dates'], set):
+                        # Determine original first date (after potential slice we don't need it)
+                        # Not strictly necessary to adjust, leave as-is or rebuild:
+                        pass
+
+    # Build traces
+    if chart_type == 'candlestick':
+        traces = prepare_candlestick_data(trends_data, value_mode=value_mode, time_period=time_period)
+    elif chart_type == 'bar':
+        traces = prepare_bar_data(trends_data, value_mode=value_mode)
+    else:
+        traces = prepare_line_data(trends_data, value_mode=value_mode, fill_enabled=fill_lines)
+
+    # Predictions
+    if predictions_enabled and prediction_days > 0:
+        add_prediction_traces(traces, prediction_method, prediction_days)
+
+    # Distinct dates count (from any first non-empty series)
+    data_points = 0
+    for t in traces:
+        if t.get('type') in ('scatter', 'bar') and t.get('x'):
+            data_points = max(data_points, len(t.get('x', [])))
+    
+    y_axis_title = 'Points Produced' if value_mode == 'interval' else 'Points'
+    layout = {
+        'title': '',
+        'paper_bgcolor': 'rgba(255,255,255,0.1)',
+        'plot_bgcolor': 'rgba(0,0,0,0)',
+        'xaxis': {
+            'title': 'Date',
+            'gridcolor': 'rgba(255,255,255,0.08)',
+            'showline': False,
+            'zeroline': False,
+            'tickangle': -35,
+            'ticks': 'outside',
+            'tickcolor': 'rgba(255,255,255,0.15)',
+            'ticklen': 6
+        },
+            'yaxis': {
+                'title': y_axis_title,
+            'rangemode': 'tozero',
+            'gridcolor': 'rgba(255,255,255,0.08)',
+            'showline': False,
+            'zeroline': False
+        },
+        'legend': {
+            'orientation': 'h',
+            'bgcolor': 'rgba(0,0,0,0)',
+            'yanchor': 'bottom',
+            'y': 1.02,
+            'x': 0
+        },
+        'margin': {'l': 60, 'r': 30, 't': 30, 'b': 70},
+        'hovermode': 'x unified',
+        'hoverlabel': {
+            'bgcolor': '#1e2533',
+            'bordercolor': '#3a4558',
+            'font': {'color': '#ffffff'}
+        },
+        'font': {
+            'family': 'Segoe UI, Inter, Arial',
+            'color': '#f0f2f6',
+            'size': 12
+        },
+        'transition': {'duration': 400, 'easing': 'cubic-in-out'}
+    }
+    # Override hovermode for interval candlestick so custom hovertemplate displays instead of default OHLC unified panel
+    if chart_type == 'candlestick' and value_mode == 'interval':
+        layout['hovermode'] = 'closest'
+    config = {
+        'displaylogo': False,
+        'responsive': True,
+        'modeBarButtonsToRemove': [
+            'zoom2d','pan2d','select2d','lasso2d','autoScale2d','resetScale2d','toggleSpikelines'
+        ],
+        'toImageButtonOptions': {'format': 'png', 'filename': 'ibu_trends_chart'}
+    }
+
+    return jsonify({
+        'success': True,
+        'data': traces,
+        'layout': layout,
+        'config': config,
+        'data_points': data_points,
+            'metadata': {
+            'chart_type': chart_type,
+            'time_period': time_period,
+                'value_mode': value_mode,
+            'series_requested': original_series_list,
+            'member_series_resolved': series_list,
+            'team_series_requested': team_series_requested,
+            'team_metric': team_metric,
+            'fill_lines': fill_lines,
+            'date_range': {
+                'start': file_infos[0]['parsed_date'].strftime('%Y-%m-%d'),
+                'end': file_infos[-1]['parsed_date'].strftime('%Y-%m-%d')
+            }
+        }
+    })
+
+def add_prediction_traces(traces, method, days):
+    """Append prediction traces in-place based on existing line/candlestick traces.
+    We only generate predictions for scatter (line) data or candlestick close values."""
+    try:
+        future_color_suffix = {'linear': 'dash', 'moving_average': 'dot'}.get(method, 'dash')
+        for trace in list(traces):  # iterate over a copy
+            # Determine y-series
+            if trace.get('type') == 'candlestick':
+                y_series = trace.get('close', [])
+            else:
+                y_series = trace.get('y', [])
+            x_series = trace.get('x', [])
+            if len(y_series) < 3:
+                continue  # not enough data
+            # Build numeric x as day indices
+            base_dates = [datetime.strptime(d, '%Y-%m-%d') for d in x_series]
+            start_date = base_dates[0]
+            x_numeric = [(d - start_date).days for d in base_dates]
+
+            if method == 'linear':
+                # Simple linear regression
+                n = len(x_numeric)
+                sum_x = sum(x_numeric)
+                sum_y = sum(y_series)
+                sum_xx = sum(x*x for x in x_numeric)
+                sum_xy = sum(x*y for x, y in zip(x_numeric, y_series))
+                denom = (n * sum_xx - sum_x * sum_x)
+                if denom == 0:
+                    continue
+                slope = (n * sum_xy - sum_x * sum_y) / denom
+                intercept = (sum_y - slope * sum_x) / n
+                def predict(x):
+                    return intercept + slope * x
+                # Use last trend continuation
+            else:  # moving_average
+                window = 5 if len(y_series) >= 5 else max(2, len(y_series)//2)
+                avg_changes = []
+                for i in range(1, len(y_series)):
+                    avg_changes.append(y_series[i] - y_series[i-1])
+                # average of last window changes
+                recent_change = sum(avg_changes[-window:]) / len(avg_changes[-window:]) if avg_changes else 0
+                def predict(x):
+                    # x here is absolute day index relative to start_date
+                    last_index = x_numeric[-1]
+                    delta_days = x - last_index
+                    return y_series[-1] + recent_change * delta_days
+
+            future_dates = []
+            future_values = []
+            last_index = x_numeric[-1]
+            last_date = base_dates[-1]
+            for i in range(1, days+1):
+                future_date = last_date + timedelta(days=i)
+                future_dates.append(future_date.strftime('%Y-%m-%d'))
+                future_values.append(predict(last_index + i))
+
+            pred_trace = {
+                'name': f"{trace['name']} (Prediction)",
+                'type': 'scatter',
+                'mode': 'lines',
+                'x': future_dates,
+                'y': future_values,
+                'line': {
+                    'color': trace.get('line', {}).get('color', '#999999'),
+                    'dash': future_color_suffix
+                },
+                'opacity': 0.7,
+                'hovertemplate': '<b>%{meta}</b><br>Date: %{x}<br>Predicted Points: %{y:.0f}<extra></extra>',
+                'meta': trace['name']
+            }
+            traces.append(pred_trace)
+    except Exception as e:
+        print(f"Prediction generation error: {e}")
+
+def aggregate_time_period(trends_data, time_period):
+    """Aggregate daily data into weekly, monthly, or yearly periods"""
+    aggregated_data = {}
+    
+    for member_name, data in trends_data.items():
+        aggregated_data[member_name] = {
+            'dates': [],
+            'points': [],
+            'daily_change': [],
+            'rank': [],
+            'open': [],
+            'high': [],
+            'low': [],
+            'close': []
+        }
+        
+        if not data['dates']:
+            continue
+        
+        # Group data by time period
+        current_period = None
+        period_data = []
+        
+        for i, date_str in enumerate(data['dates']):
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            
+            # Determine period based on time_period
+            if time_period == 'weekly':
+                # Get Monday of the week
+                period_key = (date_obj - timedelta(days=date_obj.weekday())).strftime('%Y-%m-%d')
+            elif time_period == 'monthly':
+                period_key = date_obj.strftime('%Y-%m-01')
+            elif time_period == 'yearly':
+                period_key = date_obj.strftime('%Y-01-01')
+            else:
+                period_key = date_str
+            
+            if current_period != period_key:
+                # Process previous period
+                if period_data:
+                    process_period_data(aggregated_data[member_name], current_period, period_data)
+                
+                # Start new period
+                current_period = period_key
+                period_data = []
+            
+            # Safe rank access
+            rank_value = 0
+            if i < len(data.get('rank', [])):
+                try:
+                    rank_value = int(data['rank'][i]) if data['rank'][i] is not None else 0
+                except Exception:
+                    rank_value = 0
+            period_data.append({
+                'date': date_str,
+                'points': data['points'][i] if i < len(data['points']) else 0,
+                'daily_change': data['daily_change'][i] if i < len(data['daily_change']) else 0,
+                'rank': rank_value
+            })
+        
+        # Process last period
+        if period_data:
+            process_period_data(aggregated_data[member_name], current_period, period_data)
+    
+    return aggregated_data
+
+def process_period_data(member_data, period_date, period_data):
+    """Process data for a specific time period"""
+    if not period_data:
+        return
+    
+    # Calculate OHLC for candlestick charts
+    points_values = [d['points'] for d in period_data]
+    open_val = points_values[0]
+    close_val = points_values[-1]
+    high_val = max(points_values)
+    low_val = min(points_values)
+    
+    # Calculate total change for the period
+    total_change = sum(d['daily_change'] for d in period_data)
+    
+    # Use average rank for the period
+    avg_rank = sum(d['rank'] for d in period_data) / len(period_data) if period_data else 0
+    
+    member_data['dates'].append(period_date)
+    member_data['points'].append(close_val)
+    member_data['daily_change'].append(total_change)
+    member_data['rank'].append(int(avg_rank))
+    member_data['open'].append(open_val)
+    member_data['high'].append(high_val)
+    member_data['low'].append(low_val)
+    member_data['close'].append(close_val)
+
+def prepare_bar_data(trends_data, value_mode='cumulative'):
+    """Prepare bar chart data.
+    Cumulative mode: bar height = cumulative points value (monotonic, what users usually expect for totals).
+    Interval mode: bar height = produced value (per-period production).
+    (Previous behavior used positive deltas for cumulative; replaced for clarity.)"""
+    chart_data = []
+    interval = value_mode == 'interval'
+    for member_name, data in trends_data.items():
+        if not data.get('dates'):
+            continue
+        color = name_to_color(member_name)
+        if interval and 'produced' in data:
+            y_vals = data['produced']
+            label = 'Produced'
+        else:  # cumulative
+            y_vals = data.get('points', [])
+            label = 'Points'
+        trace = {
+            'name': member_name,
+            'type': 'bar',
+            'x': data['dates'],
+            'y': y_vals,
+            'marker': {
+                'color': color,
+                'line': {'width': 0}
+            },
+            'opacity': 0.9,
+            'hovertemplate': f"<b>{member_name}</b><br>Date: %{{x}}<br>{label}: %{{y:,}}<extra></extra>"
+        }
+        chart_data.append(trace)
+    return chart_data
+
+def prepare_candlestick_data(trends_data, value_mode='cumulative', time_period='daily'):
+    """Prepare candlestick traces.
+    Interval mode (production comparison between periods):
+      - open  = previous period's produced amount (0 for first)
+      - close = current period's produced amount
+      - high/low = max/min(open, close) for simple magnitude bar (not financial high/low)
+      - customdata = [produced, change_vs_prev, percent_change_string]
+      - hovertemplate shows Produced, Δ, and %Δ.
+    Cumulative mode:
+      - Uses stored OHLC if available or falls back to points list for all fields (traditional cumulative level candle).
+    (Historical note: earlier version attempted baseline cumulative points; simplified now to production vs previous production.)"""
+    chart_data = []
+    interval = (value_mode == 'interval')
+    for member_name, data in trends_data.items():
+        dates = data.get('dates')
+        if not dates:
+            continue
+        points_list = data.get('points', [])  # cumulative closes
+        produced_list = data.get('produced') if interval else None
+        open_vals = []
+        high_vals = []
+        low_vals = []
+        close_vals = []
+        if interval and produced_list is not None:
+            for i, prod in enumerate(produced_list):
+                prev_prod = produced_list[i-1] if i > 0 else 0
+                o = prev_prod
+                c = prod
+                open_vals.append(o)
+                close_vals.append(c)
+                high_vals.append(max(o, c))
+                low_vals.append(min(o, c))
+            customdata = []
+            for o, c in zip(open_vals, close_vals):
+                produced = c
+                change = c - o
+                if o <= 0:
+                    pct_str = '—' if produced > 0 else '0.0%'
+                else:
+                    pct_val = (change / o) * 100.0
+                    pct_str = f"{pct_val:.1f}%"
+                customdata.append([produced, change, pct_str])
+            hover_template = (
+                '<b>%{meta}</b><br>'
+                'Period: %{x}<br>'
+                'Produced: %{customdata[0]:,}<br>'
+                'Δ: %{customdata[1]:,} (%{customdata[2]})'
+                '<extra></extra>'
+            )
+        else:
+            o = data.get('open') or points_list
+            h = data.get('high') or points_list
+            l = data.get('low') or points_list
+            c = data.get('close') or points_list
+            open_vals = o
+            high_vals = h
+            low_vals = l
+            close_vals = c
+            hover_template = '<b>%{meta}</b><br>Period: %{x}<br>O: %{open:,}<br>H: %{high:,}<br>L: %{low:,}<br>C: %{close:,}<extra></extra>'
+        base_color = name_to_color(member_name)
+        inc_color = blend_with(base_color, (34,197,94), 0.55)   # blend with emerald-500
+        dec_color = blend_with(base_color, (248,113,113), 0.55) # blend with red-400
+        trace = {
+            'name': member_name,
+            'type': 'candlestick',
+            'x': dates,
+            'open': open_vals,
+            'high': high_vals,
+            'low': low_vals,
+            'close': close_vals,
+            'increasing': {'line': {'color': inc_color}},
+            'decreasing': {'line': {'color': dec_color}},
+            'whiskerwidth': 0.5,
+            # Use hovertemplate (not hoverinfo) so custom production stats show; hoverinfo here was suppressing template
+            'hovertemplate': hover_template,
+            'meta': member_name
+        }
+        if interval and produced_list:
+            trace['customdata'] = customdata
+            # Suppress default candlestick hover (which can still show OHLC in some modes)
+            trace['hoverinfo'] = 'skip'
+            # Compute approximate width based on smallest x-spacing (date axis -> milliseconds)
+            width_ms = None
+            if len(dates) > 1:
+                try:
+                    parsed = [datetime.strptime(d, '%Y-%m-%d') for d in dates]
+                    gaps = [(parsed[i+1]-parsed[i]).total_seconds()*1000 for i in range(len(parsed)-1)]  # ms
+                    if gaps:
+                        # Candlestick body tends to be narrower than full category; use 60% of min gap
+                        width_ms = min(gaps) * 0.6
+                except Exception:
+                    width_ms = None
+            # Expand height by 1% for normal candles, but apply a minimum height for flat (no variation) candles
+            overall_low = min(low_vals)
+            overall_high = max(high_vals)
+            overall_range = overall_high - overall_low
+            if overall_range <= 0:
+                overall_range = 1  # prevent division by zero
+            min_span = max(overall_range * 0.01, 0.5)  # at least 0.5 (points) or 0.1% of range
+            expanded_base = []
+            expanded_height = []
+            for h, l in zip(high_vals, low_vals):
+                span = h - l
+                if span <= 0:
+                    # Flat candle: create a small vertical hoverable band centered around the flat value
+                    span_eff = min_span
+                    lower = l - span_eff / 2.0
+                    if lower < 0:
+                        lower = 0
+                    expanded_base.append(lower)
+                    expanded_height.append(span_eff)
+                else:
+                    extra = span * 0.01  # total 1% extra
+                    lower = l - extra * 0.5
+                    if lower < 0:
+                        lower = 0
+                    expanded_base.append(lower)
+                    expanded_height.append(span + extra)
+            # Add transparent bar overlay spanning (slightly bigger than) candle to capture hover anywhere
+            overlay_bar = {
+                'name': member_name,
+                'type': 'bar',
+                'x': dates,
+                'y': expanded_height,
+                'base': expanded_base,
+                'marker': {
+                    'color': 'rgba(0,0,0,0)',
+                    'line': {'width': 0}
+                },
+                'opacity': 0.01,  # nearly invisible but area still interactive
+                'customdata': customdata,
+                'hovertemplate': (
+                    '<b>%{meta}</b><br>'
+                    'Period: %{x}<br>'
+                    'Produced: %{customdata[0]:,}<br>'
+                    'Δ: %{customdata[1]:,} (%{customdata[2]})'
+                    '<extra></extra>'
+                ),
+                'meta': member_name,
+                'showlegend': False,
+                'hoverlabel': {'namelength': -1},
+                'offsetgroup': f"ovl_{member_name}",
+                'legendgroup': f"ovl_{member_name}",
+                'width': width_ms  # match approximate candle body width
+            }
+            chart_data.append(overlay_bar)
+        chart_data.append(trace)
+    return chart_data
+
+def prepare_line_data(trends_data, value_mode='cumulative', fill_enabled=True):
+    """Prepare data for line charts.
+    value_mode: 'cumulative' (points) or 'interval' (produced).
+    fill_enabled: when True apply area fill under lines; when False lines only."""
+    chart_data = []
+    label = 'Produced' if value_mode == 'interval' else 'Points'
+    for member_name, data in trends_data.items():
+        if not data.get('dates'):
+            continue
+        color = name_to_color(member_name)
+        if value_mode == 'interval' and 'produced' in data:
+            y_vals = data['produced']
+        else:
+            y_vals = data.get('points', [])
+        trace_data = {
+            'name': member_name,
+            'type': 'scatter',
+            'mode': 'lines+markers',
+            'x': data['dates'],
+            'y': y_vals,
+            'line': {'color': color, 'width': 2.4, 'shape': 'spline', 'smoothing': 0.65},
+            'marker': {'size': 5, 'color': color, 'line': {'width': 0}},
+            'hovertemplate': f"<b>{member_name}</b><br>Date: %{{x}}<br>{label}: %{{y:,}}<extra></extra>"
+        }
+        if fill_enabled:
+            # Apply area fill for every series in both modes
+            alpha_suffix = '30'  # ~19% opacity
+            fillcolor = color + alpha_suffix if len(color) == 7 else color
+            trace_data['fill'] = 'tozeroy'
+            trace_data['fillcolor'] = fillcolor
+        chart_data.append(trace_data)
+    return chart_data
+
+def fill_missing_daily_dates(trends_data):
+    """Forward-fill missing dates across series so lines are continuous.
+    Uses min->max date over all series; carries last known point; daily_change=0 for filled days."""
+    try:
+        # Gather all dates
+        all_dates = set()
+        for series in trends_data.values():
+            for d in series.get('dates', []):
+                all_dates.add(d)
+        if not all_dates:
+            return trends_data
+        start_dt = min(datetime.strptime(d, '%Y-%m-%d') for d in all_dates)
+        end_dt = max(datetime.strptime(d, '%Y-%m-%d') for d in all_dates)
+        # Build full date list
+        full_dates = []
+        cur = start_dt
+        while cur <= end_dt:
+            full_dates.append(cur.strftime('%Y-%m-%d'))
+            cur += timedelta(days=1)
+        for name, series in trends_data.items():
+            if not series.get('dates'):  # skip empty
+                continue
+            existing_idx = {d: i for i, d in enumerate(series['dates'])}
+            new_dates = []
+            new_points = []
+            new_changes = []
+            new_rank = []
+            has_rank = bool(series.get('rank')) and len(series['rank']) == len(series['dates'])
+            last_points = None
+            last_rank = None
+            for d in full_dates:
+                if d in existing_idx:
+                    idx = existing_idx[d]
+                    val = series['points'][idx]
+                    chg = series['daily_change'][idx]
+                    rk = series['rank'][idx] if has_rank else None
+                    last_points = val
+                    last_rank = rk
+                else:
+                    if last_points is None:
+                        # Before first recorded date for this series: skip
+                        continue
+                    val = last_points
+                    chg = 0
+                    rk = last_rank
+                new_dates.append(d)
+                new_points.append(val)
+                new_changes.append(chg)
+                if has_rank:
+                    new_rank.append(rk if rk is not None else 0)
+            # Replace if extended
+            if len(new_dates) > len(series['dates']):
+                series['dates'] = new_dates
+                series['points'] = new_points
+                series['daily_change'] = new_changes
+                if has_rank:
+                    series['rank'] = new_rank
+        return trends_data
+    except Exception as e:
+        print(f"fill_missing_daily_dates error: {e}")
+        return trends_data
 
 # Flask startup
 if __name__ == "__main__":
