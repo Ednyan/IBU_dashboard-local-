@@ -50,8 +50,8 @@ The IBU Dashboard is a comprehensive analytics platform that provides:
 ![Member Tracking](static/IBU_Member_page.png)
 *Member cards showing team members status regarding probation and post-probation phases*
 
-**(IN DEVELOPMENT)**
-*Member cards showing team members status regarding probation and post-probation phases*
+![Trends and Predictions](static/IBU_Trends_page.png)
+*Teams & member performance/points produced across time page with multi-series selection*
 
 ## 🛠️ Technology Stack
 
