@@ -61,6 +61,8 @@ debug_*.py
 # 📁 Data folders (optional - comment out if you want to track)
 Scraped_Team_Info/
 Scraped_Teams_Points/
+config/admin_emails.json
+config/probation_overrides.json
 
 # 📦 Distribution files
 *.tar.gz

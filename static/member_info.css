@@ -401,6 +401,80 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* Overrides indicator */
+    .override-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 0.7em;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #1f2937; /* slate-800 */
+      background: linear-gradient(135deg, rgba(255,193,7,0.9), rgba(255,152,0,0.85));
+      border: 1px solid rgba(255,193,7,0.7);
+      box-shadow: 0 2px 6px rgba(255,193,7,0.25);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .override-badge::before {
+      font-size: 0.85em;
+      opacity: 0.9;
+    }
+
+  /* header-level chip removed per request */
+    
+    /* Search bar alignment */
+    #searchBarContainer {
+      margin: 8px auto 8px;
+      padding: 0 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+
+    .searchbar-container { display:flex; justify-content:center; align-items:center; }
+    .searchbar-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .searchbar-input {
+      width: 100%;
+      padding: 12px 14px 12px 40px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.28);
+      color: #fff;
+      outline: none;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06);
+      transition: box-shadow .2s ease, border-color .2s ease, background .2s ease;
+      backdrop-filter: blur(6px);
+    }
+    .searchbar-input::placeholder { color: rgba(255,255,255,0.65); }
+    .searchbar-input:focus {
+      border-color: rgba(241, 131, 40, 0.6);
+      box-shadow: 0 8px 28px rgba(99,102,241,0.28), inset 0 1px 0 rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.34);
+    }
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      opacity: 0.85;
+      color: #e5e7eb;
+      pointer-events: none;
+    }
     
     /* Responsive design */
     @media (max-width: 768px) {

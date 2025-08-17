@@ -56,6 +56,17 @@
       <!-- Will be populated by JavaScript -->
     </div>
 
+    <!-- Member Search -->
+    <div id="searchBarContainer" class="searchbar-container animate-slide-up" style="animation-delay: 0.7s; display: none; margin: 8px 0 0;">
+      <div class="searchbar-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M15.5 15.5L20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <input id="memberSearch" class="searchbar-input" type="text" placeholder="Search members by name..." />
+      </div>
+    </div>
+
     <!-- Loading State -->
     <div id="loadingState" class="animate-slide-up" style="animation-delay: 0.8s;">
       <div class="loading-spinner-member"></div>
@@ -110,7 +121,7 @@
     }
 
     // Create member card HTML
-    function createMemberCard(member) {
+  function createMemberCard(member) {
       const statusClasses = {
         'completed': 'status-completed',
         'passed': 'status-passed',
@@ -135,7 +146,7 @@
         { key: 'month_3', title: 'Three Months' }
       ];
       
-      milestoneOrder.forEach(({ key, title }) => {
+  milestoneOrder.forEach(({ key, title }) => {
         const milestone = member.milestones[key];
         let milestoneClass = 'pending';
         let statusText = 'In Progress';
@@ -173,9 +184,18 @@
             detailsText = `${pointsFormatted} / ${targetFormatted} points`;
           }
 
+        let overrideBadge = '';
+        if (member.overrides && (key in member.overrides)) {
+          if (member.overrides[key] === true) {
+            overrideBadge = `<span class="override-badge" title="Admin override: forced pass">😇 Forgiven</span>`;
+          } else if (member.overrides[key] === false) {
+            overrideBadge = `<span class="override-badge" title="Admin override: forced fail">👿 Denied</span>`;
+          }
+        }
+
         milestonesHtml += `
           <div class="milestone ${milestoneClass}">
-            <div class="milestone-title">${title} - ${statusText}</div>
+            <div class="milestone-title">${title} - ${statusText} ${overrideBadge}</div>
             <div class="milestone-details">${detailsText}</div>
             <div class="progress-bar">
               <div class="progress-fill" style="width: ${progressPercent}%"></div>
@@ -187,8 +207,9 @@
       // All cards use the same base appearance - no special card classes for status
       let cardClass = 'member-card';
       
-      // Add data attributes for filtering
-      let dataAttributes = `data-probation-status="${member.probation_status}"`;
+  // Add data attributes for filtering
+  const dataName = (member.name || '').toLowerCase().replace(/"/g, '&quot;');
+  let dataAttributes = `data-probation-status="${member.probation_status}" data-name="${dataName}"`;
       if (member.post_probation_status) {
         dataAttributes += ` data-post-probation-status="${member.post_probation_status}"`;
       }
@@ -301,7 +322,7 @@
         `;
       }
 
-      return `
+  return `
         <div class="member-card ${cardClass}" ${dataAttributes}>
           <div class="member-header">
             <div class="member-name">${member.name}</div>
@@ -363,6 +384,8 @@
     function filterMembers(filterType) {
       const memberCards = document.querySelectorAll('.member-card');
       const statItems = document.querySelectorAll('.stat-item');
+      const qEl = document.getElementById('memberSearch');
+      const q = (qEl && qEl.value) ? qEl.value.toLowerCase().trim() : '';
       
       // Remove active class from all stat items
       statItems.forEach(item => item.classList.remove('active'));
@@ -377,6 +400,7 @@
       memberCards.forEach(card => {
         const probationStatus = card.getAttribute('data-probation-status');
         const postProbationStatus = card.getAttribute('data-post-probation-status');
+        const nameAttr = (card.getAttribute('data-name') || '').toLowerCase();
         let shouldShow = false;
         
         switch(filterType) {
@@ -399,7 +423,11 @@
             shouldShow = probationStatus === 'passed' && postProbationStatus === 'non_compliant';
             break;
         }
-        
+        // Apply name filter
+        if (q) {
+          shouldShow = shouldShow && nameAttr.includes(q);
+        }
+
         if (shouldShow) {
           card.classList.remove('hidden');
         } else {
@@ -429,6 +457,8 @@
           loadingState.style.display = 'none';
           membersContainer.style.display = 'grid';
           statsSummary.style.display = 'grid';
+          const searchBar = document.getElementById('searchBarContainer');
+          if (searchBar) searchBar.style.display = 'block';
 
           // Populate stats summary
           statsSummary.innerHTML = createStatsSummary(data.members);
@@ -436,6 +466,16 @@
           // Populate member cards
           const memberCardsHtml = data.members.map(member => createMemberCard(member)).join('');
           membersContainer.innerHTML = memberCardsHtml;
+
+          // Wire up search input
+          const searchInput = document.getElementById('memberSearch');
+          if (searchInput) {
+            let t = null;
+            searchInput.addEventListener('input', () => {
+              if (t) clearTimeout(t);
+              t = setTimeout(() => filterMembers('all'), 150);
+            });
+          }
 
           // Set default filter to "all" (Total Members)
           filterMembers('all');

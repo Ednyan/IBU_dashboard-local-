@@ -1,3 +1,13 @@
+    /* Floating controls container to allow push-on-expand */
+    .floating-controls {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 99;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
 /* New modern landing page styles */
     /* Typed custom properties for smooth animation */
     @property --rot {
@@ -210,29 +220,69 @@
 
     /* Sidebar Toggle Button (when sidebar is closed) */
     .sidebar-toggle-floating {
-      position: fixed;
-      top: 20px;
-      left: 20px;
+      position: relative; /* positioned by container */
       background: linear-gradient(135deg, rgba(224, 97, 80, 0.9) 0%, rgba(255, 122, 107, 0.9) 100%);
       border: none;
       color: white;
-      width: 45px;
+      width: 45px; /* collapsed size */
       height: 45px;
-      border-radius: 50%;
+      border-radius: 999px; /* pill when expanded */
       cursor: pointer;
       font-size: 1.2rem;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
+  gap: 0; /* no gap when collapsed so icon stays centered */
+      padding: 0; /* keep actual width 45px when collapsed */
       z-index: 99;
-      transition: all 0.3s ease;
+      transition: width 0.28s ease, padding 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease, background 0.28s ease;
       box-shadow: 0 4px 15px rgba(224, 97, 80, 0.4);
       backdrop-filter: blur(10px);
+      text-decoration: none;
+      overflow: hidden;
+      white-space: nowrap;
+      box-sizing: border-box;
     }
 
     .sidebar-toggle-floating:hover {
-      transform: scale(1.1);
+      transform: translateZ(0) scale(1.03);
       box-shadow: 0 6px 20px rgba(224, 97, 80, 0.6);
+      width: 220px; /* expand to reveal label */
+      padding: 0 14px;
+      gap: 10px; /* add spacing when expanded */
+      z-index: 1000;
+    }
+
+    .sidebar-toggle-floating .fa-icon {
+      display: inline-flex;
+      width: 24px;
+      height: 24px;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 24px;
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
+    }
+    .sidebar-toggle-floating .fa-icon img {
+      width: 22px;
+      height: 22px;
+      display: block;
+    }
+
+    .sidebar-toggle-floating .fa-label {
+      opacity: 0;
+      transform: translateX(-6px);
+      transition: opacity 0.24s ease, transform 0.24s ease, max-width 0.24s ease;
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      max-width: 0; /* hidden but present so icon stays */
+      overflow: hidden;
+    }
+
+    .sidebar-toggle-floating:hover .fa-label {
+      opacity: 1;
+      transform: translateX(0);
+      max-width: 220px;
     }
 
     .sidebar-toggle-floating.hidden {
@@ -240,34 +290,22 @@
     }
 
     /* Discord Floating Button (next to left update button) */
-    .discord-toggle-floating {
-      position: fixed;
-      top: 20px;
-      left: calc(20px + 45px + 12px); /* left button left + width + gap */
-      width: 45px;
-      height: 45px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 99;
-      background: linear-gradient(135deg, rgba(224, 97, 80, 0.9) 0%, rgba(255, 122, 107, 0.9) 100%);
-      box-shadow: 0 4px 15px rgba(224, 97, 80, 0.4);
-      backdrop-filter: blur(10px);
-      transition: all 0.3s ease;
-      text-decoration: none;
-    }
+  .discord-toggle-floating { color: #fff; }
     .discord-toggle-floating:hover {
-      transform: scale(1.1);
+      transform: translateZ(0) scale(1.03);
       box-shadow: 0 6px 20px rgba(224, 97, 80, 0.6);
+      width: 260px; /* slightly wider for longer label */
+      padding: 0 14px;
+      gap: 10px; /* add spacing when expanded */
+      z-index: 1000;
     }
-    .discord-toggle-floating img {
-      width: 24px;
-      height: 24px;
-      display: block;
-      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
-    }
+    .discord-toggle-floating img { width: 22px; height: 22px; display: block; }
+  /* remove individual absolute positioning; handled by container */
 
+    /* Ensure icon/label behavior matches for all three */
+    .discord-toggle-floating .fa-icon { flex: 0 0 24px; display: inline-flex; align-items: center; justify-content: center; }
+    .discord-toggle-floating .fa-label { opacity: 0; transform: translateX(-6px); transition: opacity 0.24s ease, transform 0.24s ease; font-weight: 600; }
+    .discord-toggle-floating:hover .fa-label { opacity: 1; transform: translateX(0); }
     /* Main container */
     .landing-container {
       display: flex;

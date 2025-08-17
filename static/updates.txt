@@ -2,7 +2,9 @@
 # Format: VERSION|DATE|TITLE|FEATURES (separated by semicolons)
 # Use emojis for visual appeal!
 
-current v2.4|August 13, 2025|Team Trends & Predictions|📈 Team & member trends page with multi-series selection;🕒 Time aggregation (daily/weekly/monthly/yearly);🔁 Value modes (cumulative vs interval);📅 Vertical date range picker with quick ranges;🔍 Search + shift‑click range select + enable/disable all;🏆 Team metric comparison (points/members/90d/180d);🤖 Prediction toggle (linear regression / moving average, configurable days);🎛 Hover mode selector (separate / unified / closest);
+Current v2.4.1|August 15, 2025|Admin Quality of Life|🔎 Member search on tracking page;🎛️ Tri‑state milestone overrides (None/Pass/Fail) with polished UI;🏷️ Milestone badges clarify Forgiven/Denied;📬 Admin notifications manager: add/remove recipients + per‑email preferences;🛡️ Fully working admin page;
+
+v2.4|August 13, 2025|Team Trends & Predictions|📈 Team & member trends page with multi-series selection;🕒 Time aggregation (daily/weekly/monthly/yearly);🔁 Value modes (cumulative vs interval);📅 Vertical date range picker with quick ranges;🔍 Search + shift‑click range select + enable/disable all;🏆 Team metric comparison (points/members/90d/180d);🤖 Prediction toggle (linear regression / moving average, configurable days);🎛 Hover mode selector (separate / unified / closest);
 
 v2.3.1|August 08, 2025|Fixes|📧 Fixes to notification system;🎨 Fixes to piechart
 

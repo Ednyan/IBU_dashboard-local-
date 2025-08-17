@@ -30,12 +30,24 @@
     </div>
   </div>
 
-  <!-- Floating Toggle Button -->
-  <button class="sidebar-toggle-floating" id="floating-toggle">📋</button>
-  <!-- Floating Discord Button -->
-  <a class="discord-toggle-floating" href="https://discord.com/invite/2S2WZMznVJ" target="_blank" rel="noopener" aria-label="Join I.B.U Discord">
-    <img src="{{ url_for('static', filename='discord-icon.svg') }}" alt="Discord" />
-  </a>
+  <!-- Floating Controls Container -->
+  <div class="floating-controls">
+    <!-- Updates -->
+    <button class="sidebar-toggle-floating" id="floating-toggle" aria-label="Updates">
+      <span class="fa-icon" aria-hidden="true">📋</span>
+      <span class="fa-label">Updates</span>
+    </button>
+    <!-- Admin Manager -->
+    <a class="sidebar-toggle-floating admin-toggle-floating" href="{{ url_for('notification_admin') }}" aria-label="Enter Admin Manager">
+      <span class="fa-icon" aria-hidden="true">🛡️</span>
+      <span class="fa-label">Admin Panel</span>
+    </a>
+    <!-- Discord -->
+    <a class="sidebar-toggle-floating discord-toggle-floating" href="https://discord.com/invite/2S2WZMznVJ" target="_blank" rel="noopener" aria-label="Join I.B.U Discord">
+      <span class="fa-icon" aria-hidden="true"><img src="{{ url_for('static', filename='discord-icon.svg') }}" alt="" /></span>
+      <span class="fa-label">Join us on Discord!</span>
+    </a>
+  </div>
 
   <!-- Main landing container -->
   <div class="landing-container" id="main-container">
@@ -104,21 +116,48 @@
       const floatingToggle = document.getElementById('floating-toggle');
       
       let isOpen = false;
-      
-      function toggleSidebar() {
-        isOpen = !isOpen;
-        sidebar.classList.toggle('open', isOpen);
-        floatingToggle.classList.toggle('hidden', isOpen);
-        sidebarToggle.textContent = isOpen ? '←' : '→';
+
+      function openSidebar() {
+        if (isOpen) return;
+        isOpen = true;
+        sidebar.classList.add('open');
+        floatingToggle.classList.add('hidden');
+        sidebarToggle.textContent = '←';
       }
-      
+
+      function closeSidebar() {
+        if (!isOpen) return;
+        isOpen = false;
+        sidebar.classList.remove('open');
+        floatingToggle.classList.remove('hidden');
+        sidebarToggle.textContent = '→';
+      }
+
+      function toggleSidebar() { isOpen ? closeSidebar() : openSidebar(); }
+
       sidebarToggle.addEventListener('click', toggleSidebar);
-      floatingToggle.addEventListener('click', toggleSidebar);
+      floatingToggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSidebar();
+      });
+      // Also open when clicking anywhere inside the expanded Updates button
+      const floatingControls = document.querySelector('.floating-controls');
+      if (floatingControls) {
+        floatingControls.addEventListener('click', (ev) => {
+          const target = ev.target;
+          if (target && (target.id === 'floating-toggle' || (target.closest && target.closest('#floating-toggle')))) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            openSidebar();
+          }
+        });
+      }
       
       // Close sidebar when clicking outside (optional)
       document.addEventListener('click', function(e) {
-        if (isOpen && !sidebar.contains(e.target) && e.target !== floatingToggle) {
-          toggleSidebar();
+        if (isOpen && !sidebar.contains(e.target) && !(floatingToggle && floatingToggle.contains(e.target))) {
+          closeSidebar();
         }
       });
     }

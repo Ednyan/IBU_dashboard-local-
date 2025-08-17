@@ -36,6 +36,47 @@ progress_queue = queue.Queue()
 layout_height = 550
 layout_width = 1000  # aspect_ratio variable removed (unused)
 
+# --- Probation Overrides (external file) ------------------------------------
+# Configure overrides file (JSON). Can be changed via env PROBATION_OVERRIDES_FILE
+OVERRIDES_FILE = os.getenv('PROBATION_OVERRIDES_FILE', os.path.join('config', 'probation_overrides.json'))
+
+def load_probation_overrides() -> dict:
+    """Load milestone pass overrides from JSON file. Returns {} if missing/invalid.
+    JSON shape: { "member_name": {"week_1": true, "month_1": false, "month_3": false } }
+    """
+    try:
+        if os.path.exists(OVERRIDES_FILE):
+            with open(OVERRIDES_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        return {}
+    except Exception as e:
+        print(f"Error loading probation overrides from {OVERRIDES_FILE}: {e}")
+        return {}
+
+def save_probation_overrides(data: dict) -> bool:
+    """Persist the overrides dict atomically. Returns True on success."""
+    try:
+        # Ensure folder exists
+        overrides_dir = os.path.dirname(OVERRIDES_FILE)
+        if overrides_dir and not os.path.exists(overrides_dir):
+            os.makedirs(overrides_dir, exist_ok=True)
+
+        tmp_path = OVERRIDES_FILE + ".tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(data or {}, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, OVERRIDES_FILE)
+        return True
+    except Exception as e:
+        print(f"Error saving probation overrides to {OVERRIDES_FILE}: {e}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        return False
+
 def name_to_color(name):
     # Hash the name to get a consistent value
     hash_object = hashlib.md5(name.encode())
@@ -992,6 +1033,7 @@ def parse_joined_date(joined_date_str):
 def get_member_probation_status():
     """Calculate probation status for all members"""
     try:
+        overrides = load_probation_overrides()
         # Get all CSV files to track progress over time
         csv_files = get_csv_files_from_folder()
         if not csv_files:
@@ -1158,6 +1200,24 @@ def get_member_probation_status():
                     # Deadline hasn't passed - check if they already achieved it
                     month_3_passed = current_points >= month_3_target if current_points >= month_3_target else None
                 
+                # Apply admin overrides (tri-state: None, True, False)
+                override = overrides.get(member_name, {}) if isinstance(overrides, dict) else {}
+                if 'week_1' in override:
+                    if override.get('week_1') is True:
+                        week_1_passed = True
+                    elif override.get('week_1') is False:
+                        week_1_passed = False
+                if 'month_1' in override:
+                    if override.get('month_1') is True:
+                        month_1_passed = True
+                    elif override.get('month_1') is False:
+                        month_1_passed = False
+                if 'month_3' in override:
+                    if override.get('month_3') is True:
+                        month_3_passed = True
+                    elif override.get('month_3') is False:
+                        month_3_passed = False
+
                 # Determine overall probation status
                 probation_status = "in_progress"
                 
@@ -1418,6 +1478,14 @@ def get_member_probation_status():
                     "probation_status": probation_status,
                     "post_probation_status": post_probation_status,
                     "post_probation_periods": post_probation_periods,
+                    "overrides": {
+                        "week_1": (overrides.get(member_name, {}).get('week_1')
+                                    if 'week_1' in overrides.get(member_name, {}) else None),
+                        "month_1": (overrides.get(member_name, {}).get('month_1')
+                                     if 'month_1' in overrides.get(member_name, {}) else None),
+                        "month_3": (overrides.get(member_name, {}).get('month_3')
+                                     if 'month_3' in overrides.get(member_name, {}) else None),
+                    },
                     "milestones": {
                         "week_1": {
                             "target": week_1_target,
@@ -1572,6 +1640,147 @@ def notification_admin():
     
     return render_template('notification_admin.html')
 
+@app.route('/api/admin/emails', methods=['GET', 'POST', 'DELETE', 'PATCH'])
+def api_admin_emails():
+    """Manage admin recipient emails (file-backed). Admin only.
+    GET: returns recipients list (back-compat: array of strings). Use ?full=1 to get objects with prefs.
+    POST: body { add?: string|string[]|{email,prefs}|[{...}], replace?: string[]|[{...}] }
+    PATCH: body { email: str, prefs: {failed?:bool, passed?:bool, non_compliant?:bool} }
+    DELETE: body { remove: string|string[] }
+    """
+    if not session.get('admin_authenticated'):
+        return jsonify({"error": "Authentication required"}), 401
+    if not NOTIFICATIONS_ENABLED:
+        return jsonify({"error": "Notification service not available"}), 400
+    try:
+        if request.method == 'GET':
+            full = request.args.get('full') in ('1','true','yes')
+            if full:
+                return jsonify({"success": True, "recipients": notification_service.admin_recipients})
+            # Back-compat: return plain emails list
+            return jsonify({"success": True, "emails": notification_service.admin_emails})
+        payload = request.get_json(silent=True) or {}
+        if request.method == 'POST':
+            if 'replace' in payload:
+                ok = notification_service.replace_admin_emails(payload.get('replace') or [])
+            else:
+                add_vals = payload.get('add')
+                add_list = add_vals if isinstance(add_vals, list) else [add_vals] if add_vals else []
+                ok = notification_service.add_admin_emails(add_list)
+            return jsonify({"success": bool(ok), "recipients": notification_service.admin_recipients, "emails": notification_service.admin_emails})
+        if request.method == 'PATCH':
+            email = str((payload.get('email') or '')).strip()
+            prefs = payload.get('prefs') or {}
+            if not email:
+                return jsonify({"success": False, "error": "Missing email"}), 400
+            # Only pass keys that were actually provided to avoid wiping others
+            changes = {}
+            for k in ('failed','passed','non_compliant'):
+                if k in prefs:
+                    changes[k] = prefs[k]
+            ok = notification_service.update_admin_email_prefs(email, changes)
+            return jsonify({"success": bool(ok), "recipients": notification_service.admin_recipients, "emails": notification_service.admin_emails})
+        if request.method == 'DELETE':
+            rem_vals = payload.get('remove')
+            rem_list = rem_vals if isinstance(rem_vals, list) else [rem_vals] if rem_vals else []
+            ok = notification_service.remove_admin_emails(rem_list)
+            return jsonify({"success": bool(ok), "recipients": notification_service.admin_recipients, "emails": notification_service.admin_emails})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/admin/members')
+def api_admin_members():
+    """Return current members with their existing override flags. Admin only."""
+    if not session.get('admin_authenticated'):
+        return jsonify({"error": "Authentication required"}), 401
+    try:
+        file_path, date_str, _ = get_latest_csv_file()
+        if not file_path:
+            return jsonify({"success": False, "error": "No data file available", "members": []}), 404
+        df = pd.read_csv(file_path)
+        df.columns = df.columns.str.strip()
+        df = df.rename(columns={"name": "Member", "points": "Points"})
+        if 'Member' not in df.columns:
+            return jsonify({"success": False, "error": "Missing Member column"}), 400
+        overrides = load_probation_overrides()
+        names = sorted([str(n) for n in df['Member'].dropna().unique().tolist()])
+        members = []
+        for n in names:
+            o = overrides.get(n, {}) if isinstance(overrides, dict) else {}
+            members.append({
+                'name': n,
+                'overrides': {
+                    'week_1': (o.get('week_1') if 'week_1' in o else None),
+                    'month_1': (o.get('month_1') if 'month_1' in o else None),
+                    'month_3': (o.get('month_3') if 'month_3' in o else None),
+                }
+            })
+        return jsonify({"success": True, "members": members, "count": len(members), "latest_date": date_str})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/overrides', methods=['GET', 'POST'])
+def api_overrides():
+    """Get or update probation overrides. Admin only.
+    GET -> { overrides: { member: {week_1, month_1, month_3} } }
+    POST body: { member: str, overrides: {week_1?: bool, month_1?: bool, month_3?: bool}, remove?: bool }
+    - If remove = true OR no truthy flags provided, the member entry is deleted.
+    """
+    if not session.get('admin_authenticated'):
+        return jsonify({"error": "Authentication required"}), 401
+    try:
+        if request.method == 'GET':
+            return jsonify({"success": True, "overrides": load_probation_overrides() or {}})
+
+        payload = request.get_json(silent=True) or {}
+        member = str(payload.get('member', '')).strip()
+        if not member:
+            return jsonify({"success": False, "error": "Missing 'member'"}), 400
+
+        remove = bool(payload.get('remove'))
+        incoming = payload.get('overrides') or {}
+
+        data = load_probation_overrides() or {}
+        if remove:
+            if member in data:
+                del data[member]
+        else:
+            # Start from existing per-member overrides (dict of provided keys only)
+            per = data.get(member, {}) if isinstance(data.get(member, {}), dict) else {}
+            # Apply tri-state updates: True/False to set, None to clear key
+            for key in ('week_1', 'month_1', 'month_3'):
+                if key in incoming:
+                    val = incoming.get(key)
+                    if val is True or val is False:
+                        per[key] = bool(val)
+                    else:
+                        # treat anything else (None/null) as clear/no override
+                        if key in per:
+                            per.pop(key, None)
+            # If empty after updates, remove member; else save back
+            if per:
+                data[member] = per
+            else:
+                data.pop(member, None)
+
+        if not save_probation_overrides(data):
+            return jsonify({"success": False, "error": "Failed to save overrides"}), 500
+
+        # Build a stable tri-state response for the member (include missing keys as null)
+        per = data.get(member, {}) if member in data else {}
+        def tri(o, k):
+            return (o.get(k) if k in o else None)
+        return jsonify({
+            "success": True,
+            "overrides": {
+                'week_1': tri(per, 'week_1'),
+                'month_1': tri(per, 'month_1'),
+                'month_3': tri(per, 'month_3'),
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
     """Admin login page"""
@@ -1613,6 +1822,7 @@ def notification_status():
             "sender_configured": bool(notification_service.sender_email),
             "admin_emails_configured": len(notification_service.admin_emails),
             "admin_emails": notification_service.admin_emails if notification_service.admin_emails else [],
+            "admin_recipients": notification_service.admin_recipients,
             "notification_history_count": len(notification_service.notification_history)
         }
         return jsonify(config_status)

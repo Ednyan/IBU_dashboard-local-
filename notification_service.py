@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 import json
 import threading
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 class NotificationService:
     """
@@ -19,18 +19,181 @@ class NotificationService:
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.sender_email = os.getenv("SENDER_EMAIL", "")
         self.sender_password = os.getenv("SENDER_PASSWORD", "")
-        
-        # Recipients configuration
-        self.admin_emails = os.getenv("ADMIN_EMAILS", "").split(",")
-        self.admin_emails = [email.strip() for email in self.admin_emails if email.strip()]
-        
+        # Recipients configuration - managed via JSON file (not .env)
+        self.admin_emails_file = os.getenv("ADMIN_EMAILS_FILE", os.path.join("config", "admin_emails.json"))
+        # recipients stored as list of {"email": str, "prefs": {"failed": bool, "passed": bool, "non_compliant": bool}}
+        self.admin_recipients = self.load_admin_emails()
+
         # Notification settings
         self.notifications_file = "notification_history.json"
         self.notification_history = self.load_notification_history()
-        
+
         # CSV tracking to prevent duplicate notifications
         self.last_processed_csv = self.notification_history.get('last_processed_csv', '')
         self.last_notification_date = self.notification_history.get('last_notification_date', '')
+
+    @property
+    def admin_emails(self) -> List[str]:
+        """Backward-compatible list of just email strings for existing APIs/UI."""
+        return self.get_all_emails()
+
+    def _default_prefs(self) -> Dict[str, bool]:
+        return {"failed": True, "passed": True, "non_compliant": True}
+
+    def _normalize_recipients(self, data: Any) -> List[Dict[str, Any]]:
+        """Normalize raw JSON data into list of recipient dicts with prefs."""
+        recipients: List[Dict[str, Any]] = []
+        if isinstance(data, dict) and 'admin_emails' in data:
+            data = data.get('admin_emails')
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, str):
+                    email = item.strip()
+                    if email:
+                        recipients.append({"email": email, "prefs": self._default_prefs().copy()})
+                elif isinstance(item, dict):
+                    email = str(item.get('email', '')).strip()
+                    if not email:
+                        continue
+                    prefs = item.get('prefs') or {}
+                    norm_prefs = self._default_prefs()
+                    for k in list(norm_prefs.keys()):
+                        if k in prefs:
+                            norm_prefs[k] = bool(prefs[k])
+                    recipients.append({"email": email, "prefs": norm_prefs})
+        return recipients
+
+    def load_admin_emails(self) -> List[Dict[str, Any]]:
+        """Load admin recipients with preferences from JSON; backward compatible with list-of-strings."""
+        try:
+            if os.path.exists(self.admin_emails_file):
+                with open(self.admin_emails_file, 'r', encoding='utf-8') as f:
+                    raw = json.load(f)
+                    recips = self._normalize_recipients(raw)
+                    return recips
+            return []
+        except Exception as e:
+            print(f"Error loading admin emails: {e}")
+            return []
+
+    def save_admin_emails(self, recipients: Optional[List[Dict[str, Any]]]) -> bool:
+        """Save admin recipients (with prefs) to JSON file. Ensures folder exists."""
+        try:
+            recips = []
+            for r in (recipients or []):
+                email = str(r.get('email', '')).strip()
+                if not email:
+                    continue
+                prefs = r.get('prefs') or {}
+                # normalize prefs
+                norm = self._default_prefs()
+                for k in norm.keys():
+                    if k in prefs:
+                        norm[k] = bool(prefs[k])
+                recips.append({"email": email, "prefs": norm})
+            # Ensure folder exists
+            d = os.path.dirname(self.admin_emails_file)
+            if d and not os.path.exists(d):
+                os.makedirs(d, exist_ok=True)
+            tmp = self.admin_emails_file + ".tmp"
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(recips, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, self.admin_emails_file)
+            self.admin_recipients = recips
+            return True
+        except Exception as e:
+            print(f"Error saving admin emails: {e}")
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
+            return False
+
+    def get_all_emails(self) -> List[str]:
+        return [r.get('email') for r in (self.admin_recipients or []) if r.get('email')]
+
+    def add_admin_emails(self, emails):
+        """Add one or more emails (string or list). Defaults prefs to all True. Returns bool."""
+        curr = {r['email']: r for r in (self.admin_recipients or []) if r.get('email')}
+        to_add = emails if isinstance(emails, list) else [emails]
+        for e in to_add:
+            if isinstance(e, dict):
+                email = str(e.get('email', '')).strip()
+                prefs = e.get('prefs') or {}
+            else:
+                email = str(e).strip()
+                prefs = {}
+            if not email:
+                continue
+            if email in curr:
+                # merge prefs if provided
+                if prefs:
+                    merged = curr[email]['prefs']
+                    for k, v in (prefs.items()):
+                        if k in merged:
+                            merged[k] = bool(v)
+            else:
+                norm = self._default_prefs()
+                for k in list(norm.keys()):
+                    if k in prefs:
+                        norm[k] = bool(prefs[k])
+                curr[email] = {"email": email, "prefs": norm}
+        return self.save_admin_emails(list(curr.values()))
+
+    def remove_admin_emails(self, emails):
+        """Remove one or more emails from the list."""
+        curr = {r['email']: r for r in (self.admin_recipients or []) if r.get('email')}
+        for e in (emails if isinstance(emails, list) else [emails]):
+            s = str(e).strip()
+            if s in curr:
+                del curr[s]
+        return self.save_admin_emails(list(curr.values()))
+
+    def replace_admin_emails(self, emails):
+        """Replace entire list with provided emails (strings or objects)."""
+        if isinstance(emails, list):
+            # normalize list
+            return self.save_admin_emails(self._normalize_recipients(emails))
+        return False
+
+    def update_admin_email_prefs(self, email: str, prefs: Dict[str, bool]) -> bool:
+        """Update preference flags for a given email."""
+        email = str(email or '').strip()
+        if not email:
+            return False
+        found = False
+        for r in (self.admin_recipients or []):
+            if r.get('email') == email:
+                for k in ["failed", "passed", "non_compliant"]:
+                    if k in prefs:
+                        r['prefs'][k] = bool(prefs[k])
+                found = True
+                break
+        if not found:
+            # Add with provided prefs merged with defaults
+            norm = self._default_prefs()
+            for k in list(norm.keys()):
+                if k in prefs:
+                    norm[k] = bool(prefs[k])
+            self.admin_recipients.append({"email": email, "prefs": norm})
+        return self.save_admin_emails(self.admin_recipients)
+
+    def get_recipients_for(self, event_type: str) -> List[str]:
+        """Return list of email strings that opted into the given event_type.
+        event_type in {'failed','passed','non_compliant'}
+        """
+        valid = {"failed", "passed", "non_compliant"}
+        et = event_type if event_type in valid else None
+        emails: List[str] = []
+        if not et:
+            return emails
+        for r in (self.admin_recipients or []):
+            email = r.get('email')
+            prefs = (r.get('prefs') or {})
+            if email and prefs.get(et, True):
+                emails.append(email)
+        return emails
         
     def load_notification_history(self) -> Dict:
         """Load notification history to avoid duplicate notifications"""
@@ -570,12 +733,10 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         subject, html_content, text_content = self.create_failure_email(member_data)
         
         # Send email
-        success = self.send_email(self.admin_emails, subject, html_content, text_content)
-        
+        recipients = self.get_recipients_for('failed')
+        success = self.send_email(recipients, subject, html_content, text_content)
         #if success:
-            # Mark as notified to prevent duplicates
-            #self.mark_as_notified(member_name, "failed")
-        
+        #    self.mark_as_notified(member_name, "failed")
         return success
     
     def notify_probation_passed(self, member_data: Dict) -> bool:
@@ -585,9 +746,10 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             print(f"Already notified about {member_name} probation passed. Skipping duplicate.")
             return True
         subject, html_content, text_content = self.create_passed_email(member_data)
-        success = self.send_email(self.admin_emails, subject, html_content, text_content)
+        recipients = self.get_recipients_for('passed')
+        success = self.send_email(recipients, subject, html_content, text_content)
         #if success:
-            #self.mark_as_notified(member_name, "passed")
+        #    self.mark_as_notified(member_name, "passed")
         return success
 
     def notify_non_compliant(self, member_data: Dict) -> bool:
@@ -597,9 +759,10 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             print(f"Already notified about {member_name} non-compliance. Skipping duplicate.")
             return True
         subject, html_content, text_content = self.create_non_compliant_email(member_data)
-        success = self.send_email(self.admin_emails, subject, html_content, text_content)
+        recipients = self.get_recipients_for('non_compliant')
+        success = self.send_email(recipients, subject, html_content, text_content)
         #if success:
-           # self.mark_as_notified(member_name, "non_compliant")
+        #    self.mark_as_notified(member_name, "non_compliant")
         return success
 
     def check_and_notify_failures(self, members_data: List[Dict], current_csv_file: str = None):
