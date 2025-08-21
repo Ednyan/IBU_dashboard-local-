@@ -40,6 +40,8 @@ layout_width = 1000  # aspect_ratio variable removed (unused)
 # Configure overrides file (JSON). Can be changed via env PROBATION_OVERRIDES_FILE
 OVERRIDES_FILE = os.getenv('PROBATION_OVERRIDES_FILE', os.path.join('config', 'probation_overrides.json'))
 
+MEMBER_INFO_CACHE_FILE = "./cache/member_info.json"
+
 def load_probation_overrides() -> dict:
     """Load milestone pass overrides from JSON file. Returns {} if missing/invalid.
     JSON shape: { "member_name": {"week_1": true, "month_1": false, "month_3": false } }
@@ -1560,7 +1562,7 @@ def member_info():
 def get_probation_data():
     """API endpoint to get probation status data"""
     try:
-        probation_data = get_member_probation_status()
+        probation_data = check_probation_cache()
         
         # Check for probation failures and send notifications
         if NOTIFICATIONS_ENABLED and probation_data and 'members' in probation_data:
@@ -1576,6 +1578,32 @@ def get_probation_data():
     except Exception as e:
         print(f"Error in get_probation_data: {str(e)}")
         return jsonify({"error": str(e)})
+
+def check_num_csv():
+    if not os.path.isdir(DATA_FOLDER):
+        return 0, 0
+    return len([f for f in os.listdir(DATA_FOLDER) if f.endswith(".csv")])
+
+def check_probation_cache():
+    csv_count = check_num_csv()
+
+    # Check the cache to see if it needs to recompute
+    if os.path.exists(MEMBER_INFO_CACHE_FILE):
+        cache_mtime = os.path.getmtime(MEMBER_INFO_CACHE_FILE)
+        with open(MEMBER_INFO_CACHE_FILE) as f:
+            cached = json.load(f)
+        cached_csv_count = cached.get("_csv_count", 0)
+        # Return cache if CSV count is the same.
+        if cached_csv_count == csv_count:
+            return cached
+
+    # Otherwise recompute
+    data = get_member_probation_status()
+    data["_csv_count"] = csv_count
+    os.makedirs(os.path.dirname(MEMBER_INFO_CACHE_FILE), exist_ok=True)
+    with open(MEMBER_INFO_CACHE_FILE, "w") as f:
+        json.dump(data, f)
+    return data
 
 @app.route('/test_notification')
 def test_notification():
