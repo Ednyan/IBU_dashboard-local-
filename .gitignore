@@ -63,6 +63,7 @@ Scraped_Team_Info/
 Scraped_Teams_Points/
 config/admin_emails.json
 config/probation_overrides.json
+README_email_to_discord.md
 
 # 📦 Distribution files
 *.tar.gz

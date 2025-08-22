@@ -13,6 +13,8 @@ import re
 import zipfile
 import io
 import threading
+import logging
+import time
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -588,6 +590,80 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'ibu-dashboard-secret-key-change-
 
 # Admin password configuration
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default password - change in .env
+
+# --- Background Scheduler: Email -> Discord Forwarder ------------------------
+# Import the worker function from the standalone script
+try:
+    from email_to_discord import fetch_and_forward as _email_to_discord_run_once
+    _EMAIL_TO_DISCORD_AVAILABLE = True
+except Exception as _e:
+    print(f"[Email→Discord] Forwarder unavailable: {_e}")
+    _EMAIL_TO_DISCORD_AVAILABLE = False
+
+# Config via env (optional overrides)
+EMAIL_TO_DISCORD_ENABLED = os.getenv("EMAIL_TO_DISCORD_ENABLED", "true").lower() == "true"
+EMAIL_TO_DISCORD_INTERVAL_SECONDS = int(os.getenv("EMAIL_TO_DISCORD_INTERVAL_SECONDS", "300"))
+
+_email_discord_stop = threading.Event()
+_email_discord_thread = None
+
+def _email_to_discord_worker(interval_sec: int):
+    logging.getLogger().setLevel(logging.INFO)
+    while not _email_discord_stop.is_set():
+        try:
+            if _EMAIL_TO_DISCORD_AVAILABLE and EMAIL_TO_DISCORD_ENABLED:
+                _email_to_discord_run_once()
+        except Exception as e:
+            logging.exception("[Email→Discord] Worker error: %s", e)
+        # Sleep in 1s ticks so we can stop quickly
+        for _ in range(max(1, int(interval_sec))):
+            if _email_discord_stop.is_set():
+                break
+            time.sleep(1)
+
+def start_email_to_discord_scheduler():
+    global _email_discord_thread
+    if not _EMAIL_TO_DISCORD_AVAILABLE:
+        return
+    if not EMAIL_TO_DISCORD_ENABLED:
+        print("[Email→Discord] Scheduler disabled via env (EMAIL_TO_DISCORD_ENABLED=false)")
+        return
+    # Avoid starting twice (e.g., Flask debug reloader)
+    if getattr(app, "_email_discord_started", False):
+        return
+    if getattr(app, "debug", False) and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+    app._email_discord_started = True
+    print(f"[Email→Discord] Starting scheduler every {EMAIL_TO_DISCORD_INTERVAL_SECONDS}s")
+    _email_discord_thread = threading.Thread(
+        target=_email_to_discord_worker,
+        args=(EMAIL_TO_DISCORD_INTERVAL_SECONDS,),
+        daemon=True,
+        name="EmailToDiscordWorker"
+    )
+    _email_discord_thread.start()
+
+def stop_email_to_discord_scheduler():
+    _email_discord_stop.set()
+    try:
+        if _email_discord_thread and _email_discord_thread.is_alive():
+            _email_discord_thread.join(timeout=3)
+    except Exception:
+        pass
+
+@app.before_request
+def _boot_bg_workers():
+    """Ensure background workers are started; idempotent and cheap per-request check."""
+    start_email_to_discord_scheduler()
+
+# Ensure background workers are stopped on process exit
+atexit.register(stop_email_to_discord_scheduler)
+
+# Eagerly start background workers at process start (guarded against duplicates)
+try:
+    start_email_to_discord_scheduler()
+except Exception as _e:
+    print(f"[Email→Discord] Failed to start scheduler on boot: {_e}")
 
 @app.route('/')
 def index():
