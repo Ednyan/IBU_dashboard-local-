@@ -226,6 +226,7 @@ def send_to_discord(webhook_url: str, subject: str, sender: str, date_str: str, 
     wb_avatar = os.getenv("DISCORD_WEBHOOK_AVATAR_URL", "").strip()
     # Optional banner and embed color
     banner_url = os.getenv("DISCORD_BANNER_URL", "").strip()
+    banner_enabled = os.getenv("DISCORD_BANNER_ENABLED", "false").lower() == "true"
     embed_color_hex = os.getenv("DISCORD_EMBED_COLOR", "").strip()
     embed_color = None
     if embed_color_hex:
@@ -236,7 +237,7 @@ def send_to_discord(webhook_url: str, subject: str, sender: str, date_str: str, 
     for i, ch in enumerate(body_chunks, 1):
         content = header if i == 1 else "(cont.)"
         embed = {"description": ch}
-        if i == 1 and banner_url:
+        if i == 1 and banner_enabled and banner_url:
             embed["image"] = {"url": banner_url}
         if embed_color is not None:
             embed["color"] = embed_color
@@ -246,7 +247,7 @@ def send_to_discord(webhook_url: str, subject: str, sender: str, date_str: str, 
         if wb_avatar:
             payload["avatar_url"] = wb_avatar
         if debug:
-            print(f"[Email→Discord] Posting chunk {i}/{len(body_chunks)} (desc_len={len(ch)}) banner={'yes' if (i==1 and banner_url) else 'no'} color={'set' if embed_color is not None else 'none'}")
+            print(f"[Email→Discord] Posting chunk {i}/{len(body_chunks)} (desc_len={len(ch)}) banner={'yes' if (i==1 and banner_enabled and banner_url) else 'no'} color={'set' if embed_color is not None else 'none'}")
         resp = requests.post(webhook_url, json=payload)
         # Basic 429 handling
         if resp.status_code == 429:
