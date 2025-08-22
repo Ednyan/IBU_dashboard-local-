@@ -602,7 +602,7 @@ except Exception as _e:
 
 # Config via env (optional overrides)
 EMAIL_TO_DISCORD_ENABLED = os.getenv("EMAIL_TO_DISCORD_ENABLED", "true").lower() == "true"
-EMAIL_TO_DISCORD_INTERVAL_SECONDS = int(os.getenv("EMAIL_TO_DISCORD_INTERVAL_SECONDS", "300"))
+EMAIL_TO_DISCORD_INTERVAL_SECONDS = int(os.getenv("EMAIL_TO_DISCORD_INTERVAL_SECONDS", "900"))
 
 _email_discord_stop = threading.Event()
 _email_discord_thread = None
