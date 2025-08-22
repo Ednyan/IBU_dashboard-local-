@@ -2,6 +2,7 @@ import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
 from datetime import datetime
 import os
 import json
@@ -696,7 +697,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             # Create message
             message = MIMEMultipart("alternative")
             message["Subject"] = subject
-            message["From"] = self.sender_email
+            message["From"] = formataddr(("IBU Assistant", self.sender_email))
             message["To"] = ", ".join(to_emails)
             
             # Add both plain text and HTML parts
