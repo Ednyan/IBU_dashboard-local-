@@ -67,3 +67,8 @@ config/probation_overrides.json
 # 📦 Distribution files
 *.tar.gz
 *.zip
+
+
+# Added by cargo
+
+/target
