@@ -221,12 +221,32 @@ def send_to_discord(webhook_url: str, subject: str, sender: str, date_str: str, 
     # Embed description limit is 4096 chars; use a safety margin.
     body_chunks = split_for_discord(body or "(no content)", limit=4000)
     debug = os.getenv("EMAIL_TO_DISCORD_DEBUG", "false").lower() == "true"
+    # Optional per-message overrides for webhook display name and avatar
+    wb_username = os.getenv("DISCORD_WEBHOOK_USERNAME", "").strip()
+    wb_avatar = os.getenv("DISCORD_WEBHOOK_AVATAR_URL", "").strip()
+    # Optional banner and embed color
+    banner_url = os.getenv("DISCORD_BANNER_URL", "").strip()
+    embed_color_hex = os.getenv("DISCORD_EMBED_COLOR", "").strip()
+    embed_color = None
+    if embed_color_hex:
+        try:
+            embed_color = int(embed_color_hex, 16)
+        except ValueError:
+            embed_color = None
     for i, ch in enumerate(body_chunks, 1):
         content = header if i == 1 else "(cont.)"
         embed = {"description": ch}
+        if i == 1 and banner_url:
+            embed["image"] = {"url": banner_url}
+        if embed_color is not None:
+            embed["color"] = embed_color
         payload = {"content": content, "embeds": [embed]}
+        if wb_username:
+            payload["username"] = wb_username
+        if wb_avatar:
+            payload["avatar_url"] = wb_avatar
         if debug:
-            print(f"[Email→Discord] Posting chunk {i}/{len(body_chunks)} (desc_len={len(ch)})")
+            print(f"[Email→Discord] Posting chunk {i}/{len(body_chunks)} (desc_len={len(ch)}) banner={'yes' if (i==1 and banner_url) else 'no'} color={'set' if embed_color is not None else 'none'}")
         resp = requests.post(webhook_url, json=payload)
         # Basic 429 handling
         if resp.status_code == 429:
