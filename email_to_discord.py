@@ -12,6 +12,7 @@ from email.utils import parsedate_to_datetime
 from dotenv import load_dotenv
 
 STATE_FILE = os.path.join("config", "email_to_discord_state.json")
+LOCK_FILE = os.path.join("config", "email_to_discord.lock")
 
 
 def load_state() -> dict:
@@ -33,6 +34,54 @@ def save_state(state: dict):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
     os.replace(tmp, STATE_FILE)
+
+
+def _ensure_dir(path: str):
+    d = os.path.dirname(path)
+    if d and not os.path.exists(d):
+        os.makedirs(d, exist_ok=True)
+
+
+def _try_acquire_lock(lock_path: str, stale_seconds: int) -> bool:
+    """Best-effort cross-process lock using atomic create of a lock file.
+    If an existing lock is stale (mtime older than threshold), remove and retry once.
+    Returns True if acquired, False otherwise.
+    """
+    _ensure_dir(lock_path)
+    now = time.time()
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"pid": os.getpid(), "ts": now}))
+        except Exception:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        return True
+    except FileExistsError:
+        try:
+            st = os.stat(lock_path)
+            if (now - st.st_mtime) > max(30, stale_seconds):
+                # Stale lock: remove and retry once
+                os.remove(lock_path)
+                # retry once
+                return _try_acquire_lock(lock_path, stale_seconds)
+        except Exception:
+            # If we cannot stat/remove, assume locked
+            pass
+        return False
+
+
+def _release_lock(lock_path: str):
+    try:
+        os.remove(lock_path)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        # Non-fatal
+        pass
 
 
 def decode_mime(s: str) -> str:
@@ -296,6 +345,14 @@ def fetch_and_forward():
     if not (imap_host and imap_user and imap_pass and discord_webhook):
         raise RuntimeError("Missing IMAP_* or DISCORD_WEBHOOK_URL environment variables")
 
+    # Acquire a cross-process lock to avoid duplicate runs from multiple schedulers/processes
+    stale_secs = int(os.getenv("EMAIL_TO_DISCORD_LOCK_STALE_SECONDS", "600"))
+    lock_acquired = _try_acquire_lock(LOCK_FILE, stale_secs)
+    if not lock_acquired:
+        if debug:
+            print("[Email→Discord] Lock held by another process; skipping this cycle")
+        return
+
     state = load_state()
     last_uid = int(state.get("last_uid", 0))
     if debug:
@@ -359,6 +416,8 @@ def fetch_and_forward():
             M.logout()
         except Exception:
             pass
+        # Always release the lock
+        _release_lock(LOCK_FILE)
 
 
 if __name__ == "__main__":

@@ -603,6 +603,7 @@ except Exception as _e:
 # Config via env (optional overrides)
 EMAIL_TO_DISCORD_ENABLED = os.getenv("EMAIL_TO_DISCORD_ENABLED", "true").lower() == "true"
 EMAIL_TO_DISCORD_INTERVAL_SECONDS = int(os.getenv("EMAIL_TO_DISCORD_INTERVAL_SECONDS", "900"))
+EMAIL_TO_DISCORD_START_EAGER = os.getenv("EMAIL_TO_DISCORD_START_EAGER", "true").lower() == "true"
 
 _email_discord_stop = threading.Event()
 _email_discord_thread = None
@@ -631,8 +632,13 @@ def start_email_to_discord_scheduler():
     # Avoid starting twice (e.g., Flask debug reloader)
     if getattr(app, "_email_discord_started", False):
         return
+    # Prevent duplicate starts across Flask reloader or multiple gunicorn workers
     if getattr(app, "debug", False) and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         return
+    # Extra process-level guard using an env-scoped flag
+    if os.environ.get("EMAIL_TO_DISCORD_ALREADY_STARTED") == "1":
+        return
+    os.environ["EMAIL_TO_DISCORD_ALREADY_STARTED"] = "1"
     app._email_discord_started = True
     print(f"[Email→Discord] Starting scheduler every {EMAIL_TO_DISCORD_INTERVAL_SECONDS}s")
     _email_discord_thread = threading.Thread(
@@ -651,19 +657,21 @@ def stop_email_to_discord_scheduler():
     except Exception:
         pass
 
-@app.before_request
-def _boot_bg_workers():
-    """Ensure background workers are started; idempotent and cheap per-request check."""
-    start_email_to_discord_scheduler()
+if EMAIL_TO_DISCORD_START_EAGER:
+    @app.before_request
+    def _boot_bg_workers():
+        """Ensure background workers are started; idempotent and cheap per-request check."""
+        start_email_to_discord_scheduler()
 
 # Ensure background workers are stopped on process exit
 atexit.register(stop_email_to_discord_scheduler)
 
 # Eagerly start background workers at process start (guarded against duplicates)
-try:
-    start_email_to_discord_scheduler()
-except Exception as _e:
-    print(f"[Email→Discord] Failed to start scheduler on boot: {_e}")
+if EMAIL_TO_DISCORD_START_EAGER:
+    try:
+        start_email_to_discord_scheduler()
+    except Exception as _e:
+        print(f"[Email→Discord] Failed to start scheduler on boot: {_e}")
 
 @app.route('/')
 def index():
