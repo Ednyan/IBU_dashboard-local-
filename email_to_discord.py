@@ -380,7 +380,8 @@ def fetch_and_forward():
             print(f"[Email→Discord] Found {len(uids)} UNSEEN uids newer than {last_uid}: {uids[:10]}{'...' if len(uids)>10 else ''}")
 
         for uid in uids:
-            typ, msg_data = M.uid('fetch', str(uid), '(RFC822)')
+            # Use BODY.PEEK[] to avoid setting \Seen when fetching the message
+            typ, msg_data = M.uid('fetch', str(uid), '(BODY.PEEK[])')
             if typ != 'OK' or not msg_data or not msg_data[0]:
                 last_uid = max(last_uid, uid)
                 continue
@@ -405,13 +406,19 @@ def fetch_and_forward():
             body = extract_text(msg).strip()
             if debug:
                 print(f"[Email→Discord] Forwarding UID {uid}: From='{frm}', Subject='{subj}', body_len={len(body)}")
-            send_to_discord(discord_webhook, subj, frm, date_str, body)
-            # Mark as seen
             try:
-                M.uid('store', str(uid), '+FLAGS', '(\\Seen)')
-            except Exception:
-                pass
-            last_uid = max(last_uid, uid)
+                send_to_discord(discord_webhook, subj, frm, date_str, body)
+                # Mark as seen only after successful Discord post
+                try:
+                    M.uid('store', str(uid), '+FLAGS', '(\\Seen)')
+                except Exception as me:
+                    if debug:
+                        print(f"[Email→Discord] Failed to mark UID {uid} as Seen: {me}")
+                last_uid = max(last_uid, uid)
+            except Exception as post_err:
+                # Do not mark as seen on failure to allow retry in next cycle
+                if debug:
+                    print(f"[Email→Discord] Post failed for UID {uid}: {post_err}")
 
         state["last_uid"] = last_uid
         save_state(state)
