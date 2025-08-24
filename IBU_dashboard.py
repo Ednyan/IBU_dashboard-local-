@@ -657,12 +657,6 @@ def stop_email_to_discord_scheduler():
     except Exception:
         pass
 
-if EMAIL_TO_DISCORD_START_EAGER:
-    @app.before_request
-    def _boot_bg_workers():
-        """Ensure background workers are started; idempotent and cheap per-request check."""
-        start_email_to_discord_scheduler()
-
 # Ensure background workers are stopped on process exit
 atexit.register(stop_email_to_discord_scheduler)
 

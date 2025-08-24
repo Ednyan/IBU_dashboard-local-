@@ -11,8 +11,10 @@ from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime
 from dotenv import load_dotenv
 
-STATE_FILE = os.path.join("config", "email_to_discord_state.json")
-LOCK_FILE = os.path.join("config", "email_to_discord.lock")
+# Resolve absolute paths relative to this file so multiple processes share the same files
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_FILE = os.path.join(BASE_DIR, "config", "email_to_discord_state.json")
+LOCK_FILE = os.path.join(BASE_DIR, "config", "email_to_discord.lock")
 
 
 def load_state() -> dict:
@@ -329,7 +331,11 @@ def match_filters(frm: str, subj: str, from_whitelist, subj_keywords):
 
 def fetch_and_forward():
     """Fetch unread emails via IMAP and forward matching ones to Discord."""
-    load_dotenv()
+    # Load .env from project root regardless of current working directory
+    try:
+        load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
+    except Exception:
+        load_dotenv()
 
     imap_host = os.getenv("IMAP_HOST", "").strip()
     imap_user = os.getenv("IMAP_USER", "").strip()
