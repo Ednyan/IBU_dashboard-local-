@@ -2,7 +2,7 @@
 # Format: VERSION|DATE|TITLE|FEATURES (separated by semicolons)
 # Use emojis for visual appeal!
 
-Current v2.4.2|August 31, 2025|Quality of Life & Fixes|🔎 Fixed search on Data Series (Trends and Predictions Page);🌐 Member cards with redirect button to member's Sheepit profile;🎨 Improved flexiblity of UI on the Homepage;
+Current v2.4.2|August 31, 2025|Quality of Life & Fixes|🔎 Fixed search on Data Series (Trends and Predictions Page);🌐 Member cards with redirect button to member's Sheepit profile;🎨 Improved flexibility of UI on the Homepage;
 
 v2.4.1|August 15, 2025|Admin Quality of Life|🔎 Member search on tracking page;🎛️ Tri‑state milestone overrides (None/Pass/Fail) with polished UI;🏷️ Milestone badges clarify Forgiven/Denied;📬 Admin notifications manager: add/remove recipients + per‑email preferences;🛡️ Fully working admin page;
 
