@@ -87,6 +87,18 @@
 
   <!-- Scripts -->
   <script>
+  // Static asset URLs available to JS
+  const SHEEPIT_ICON_URL = "{{ url_for('static', filename='sheepit_logo.png') }}";
+    // Basic HTML escaping to safely insert dynamic text in attributes/HTML
+  function escapeHtml(s) {
+      if (s === undefined || s === null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
     // Particle system (same as other pages)
     function createParticles() {
       const container = document.getElementById('particles');
@@ -204,8 +216,12 @@
         `;
       });
 
-      // All cards use the same base appearance - no special card classes for status
-      let cardClass = 'member-card';
+  // All cards use the same base appearance - no special card classes for status
+  let cardClass = 'member-card';
+
+  // Build SheepIt profile URL (encode username safely) and escaped display name
+  const profileUrl = `https://www.sheepit-renderfarm.com/user/${encodeURIComponent(member.name)}/profile`;
+  const displayName = escapeHtml(member.name || '');
       
   // Add data attributes for filtering
   const dataName = (member.name || '').toLowerCase().replace(/"/g, '&quot;');
@@ -325,7 +341,12 @@
   return `
         <div class="member-card ${cardClass}" ${dataAttributes}>
           <div class="member-header">
-            <div class="member-name">${member.name}</div>
+            <div class="member-title">
+              <div class="member-name">${displayName}</div>
+              <a class="sheepit-link" href="${profileUrl}" target="_blank" rel="noopener noreferrer" title="Open SheepIt profile for ${displayName}">
+                <img class="sheepit-icon" src="${SHEEPIT_ICON_URL}" alt="SheepIt" />
+              </a>
+            </div>
             <div class="status-badge ${statusClasses[member.probation_status]}">${statusLabels[member.probation_status]}</div>
           </div>
           <div class="member-details">

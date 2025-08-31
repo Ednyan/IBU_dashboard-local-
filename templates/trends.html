@@ -421,8 +421,14 @@
     });
 
     function filterMembers(term){
-      const options=document.querySelectorAll('.member-option');
-      options.forEach(o=>{if(o.dataset.member==='total') return; const show=o.dataset.member.toLowerCase().includes(term.toLowerCase()); o.style.display=show?'block':'none';});
+      const options=document.querySelectorAll('#memberDropdown .member-option');
+      const q = (term||'').toLowerCase();
+      options.forEach(o=>{
+        const name = (o.dataset.member||'').toLowerCase();
+        if(name==='total'){ o.style.display='block'; return; }
+        const show = !q || name.includes(q);
+        o.style.display = show ? 'block' : 'none';
+      });
     }
 
     function filterTeams(term){

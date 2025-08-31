@@ -113,6 +113,9 @@
     }
     
     .member-card {
+      display: block; /* anchors render as block cards */
+      color: inherit; /* keep text color */
+      text-decoration: none; /* remove link underline */
       background: rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -140,6 +143,11 @@
       align-items: center;
       margin-bottom: 15px;
     }
+    .member-title { display: flex; align-items: center; gap: 8px; }
+    .sheepit-link { display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; padding: 2px; transition: transform .15s ease, filter .15s ease; }
+    .sheepit-link:hover { transform: scale(1.05); filter: drop-shadow(0 0 6px rgba(255,255,255,0.25)); }
+    .sheepit-icon { width: 24px; height: 24px; object-fit: contain; }
+    .member-name + .sheepit-link .sheepit-icon { width: 28px; height: 28px; }
     
     .member-name {
       font-size: 1.2em;

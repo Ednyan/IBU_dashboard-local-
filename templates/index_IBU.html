@@ -8,6 +8,43 @@
   <link rel="preload" as="image" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
   <link rel="preload" as="image" href="{{ url_for('static', filename='IBU_text.svg') }}">
   <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='index.css') }}?v={{ range(1000, 9999) | random }}">
+  <style>
+  /* Ensure hidden state beats global !important display */
+  .stats-panel.is-hidden { display: none !important; }
+    /* Draggable stats panel affordances */
+    #stats-panel {
+      position: fixed;
+      z-index: 999;
+      width: 320px;
+      display: none; /* default hidden until JS decides */
+      cursor: grab; /* hand-like cursor */
+    }
+    #stats-panel.visible { display: block; }
+    #stats-panel.dragging { cursor: grabbing; }
+    #stats-panel .drag-hint {
+      position: absolute;
+      top: 6px; right: 36px;
+      font-size: 0.8rem; color: rgba(255,255,255,0.6);
+      user-select: none; pointer-events: none;
+    }
+    #stats-minimize-btn {
+      position: absolute;
+      top: 6px; right: 6px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.35);
+      color: #fff; border-radius: 8px;
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 1rem; font-weight: 700;
+      line-height: 1;
+  z-index: 2; /* ensure above panel content */
+    }
+    #stats-minimize-btn:hover { background: rgba(0,0,0,0.5); }
+    /* Floating restore button shown only when minimized */
+    .stats-toggle-floating.hidden { display: none !important; }
+    /* Overlay used during dragging to prevent selecting/clicking other content */
+    #drag-overlay { position: fixed; inset: 0; background: transparent; z-index: 998; display: none; cursor: grabbing; }
+  </style>
 </head>
 <body>
   <!-- Particles container -->
@@ -47,6 +84,11 @@
       <span class="fa-icon" aria-hidden="true"><img src="{{ url_for('static', filename='discord-icon.svg') }}" alt="" /></span>
       <span class="fa-label">Join us on Discord!</span>
     </a>
+    <!-- Stats restore (visible when minimized) -->
+    <button class="sidebar-toggle-floating stats-toggle-floating hidden" id="stats-toggle-floating" aria-label="Show Daily Statistics">
+      <span class="fa-icon" aria-hidden="true">📊</span>
+      <span class="fa-label">Daily Stats</span>
+    </button>
   </div>
 
   <!-- Main landing container -->
@@ -99,6 +141,8 @@
 
   <!-- Move stats panel OUTSIDE the landing-container for proper positioning -->
   <div class="stats-panel loaded" id="stats-panel">
+  <button id="stats-minimize-btn" title="Minimize" aria-label="Minimize">–</button>
+    <div class="drag-hint">drag anywhere</div>
     <div class="live-stats" id="live-stats">
       <h3>📊 Daily Statistics</h3>
       <div class="stat-item">
@@ -107,6 +151,7 @@
       </div>
     </div>
   </div>
+  <div id="drag-overlay"></div>
 
   <script>
     // Sidebar functionality
@@ -300,23 +345,8 @@
       console.log('🔍 Stats panel element:', statsPanel);
       console.log('🔍 Live stats element:', liveStats);
       
-      if (statsPanel) {
-        // Force all visibility properties
-        statsPanel.style.position = 'fixed';
-        statsPanel.style.top = '50%';
-        statsPanel.style.right = '2rem';
-        statsPanel.style.transform = 'translateY(-50%)';
-        statsPanel.style.zIndex = '999';
-        statsPanel.style.display = 'block';
-        statsPanel.style.visibility = 'visible';
-        statsPanel.style.opacity = '1';
-        statsPanel.style.width = '320px';
-        
-        console.log('✅ Forced stats panel visibility');
-        console.log('🔍 Stats panel computed style:', window.getComputedStyle(statsPanel));
-      } else {
-        console.error('❌ Stats panel element not found!');
-      }
+  // Initialize draggable/minimizable stats panel
+  initStatsPanelWidget();
       
       if (liveStats) {
         liveStats.style.display = 'flex';
@@ -583,6 +613,8 @@ For more information, join our <a href="https://discord.com/invite/2S2WZMznVJ" t
             
             console.log('✅ Stats UI updated successfully');
             document.getElementById('stats-panel').classList.add('loaded');
+            // Reapply saved position now that content height is finalized
+            try { if (window.__reapplyStatsPanelPosition) window.__reapplyStatsPanelPosition(); } catch {}
             return; // Success, exit function
           } else {
             console.error('❌ Invalid stats data structure:', data);
@@ -613,6 +645,8 @@ For more information, join our <a href="https://discord.com/invite/2S2WZMznVJ" t
           </div>
         `;
         document.getElementById('stats-panel').classList.add('loaded');
+  // Reapply saved position even on error layout
+  try { if (window.__reapplyStatsPanelPosition) window.__reapplyStatsPanelPosition(); } catch {}
       }
     }
 
@@ -701,6 +735,190 @@ For more information, join our <a href="https://discord.com/invite/2S2WZMznVJ" t
         startFileMonitoring();
       }, 1500);
     });
+  </script>
+  <script>
+    // Draggable + Minimize logic for stats panel
+    function initStatsPanelWidget() {
+      const panel = document.getElementById('stats-panel');
+      const restoreBtn = document.getElementById('stats-toggle-floating');
+      const minimizeBtn = document.getElementById('stats-minimize-btn');
+  const overlay = document.getElementById('drag-overlay');
+      if (!panel || !restoreBtn || !minimizeBtn) return;
+
+      const LS_POS = 'statsPanelPos';
+      const LS_MIN = 'statsPanelMinimized';
+
+      // Helpers
+      function applyPos(pos) {
+        if (!pos) return;
+        // Ensure visibility for accurate measurements
+        panel.classList.add('visible');
+        panel.style.right = 'auto';
+        const rect = panel.getBoundingClientRect();
+        const panelH = rect.height;
+        const maxLeft = Math.max(0, window.innerWidth - rect.width);
+        let left = Math.max(0, Math.min(maxLeft, pos.left || 0));
+        // Compute top using anchor if available
+        let top;
+        if (pos.anchorY === 'bottom' && typeof pos.bottomGap === 'number') {
+          top = window.innerHeight - panelH - pos.bottomGap;
+        } else {
+          top = typeof pos.top === 'number' ? pos.top : 0;
+        }
+        // Final clamp
+        const maxTop = Math.max(0, window.innerHeight - panelH);
+        top = Math.max(0, Math.min(maxTop, top));
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+      }
+      function savePos() {
+        const rect = panel.getBoundingClientRect();
+        const bottomGap = Math.max(0, window.innerHeight - (rect.top + rect.height));
+        const anchorY = bottomGap <= 40 ? 'bottom' : 'top'; // treat near-bottom as bottom-anchored
+        const pos = {
+          left: Math.max(0, Math.min(window.innerWidth - rect.width, rect.left)),
+          top: Math.max(0, Math.min(window.innerHeight - rect.height, rect.top)),
+          bottomGap,
+          anchorY
+        };
+        try { localStorage.setItem(LS_POS, JSON.stringify(pos)); } catch {}
+      }
+      function getSavedPos() {
+        try { return JSON.parse(localStorage.getItem(LS_POS) || 'null'); } catch { return null; }
+      }
+      function minimize() {
+        panel.classList.add('is-hidden');
+        panel.classList.remove('visible');
+        restoreBtn.classList.remove('hidden');
+        try { localStorage.setItem(LS_MIN, '1'); } catch {}
+      }
+      function restore() {
+        panel.classList.remove('is-hidden');
+        panel.classList.add('visible');
+        restoreBtn.classList.add('hidden');
+        try { localStorage.removeItem(LS_MIN); } catch {}
+        // Reapply saved position on restore
+        const saved = getSavedPos();
+        if (saved) applyPos(saved);
+      }
+
+      // Initial state
+      const minimized = (localStorage.getItem(LS_MIN) === '1');
+      if (minimized) {
+        panel.classList.add('is-hidden');
+        restoreBtn.classList.remove('hidden');
+      } else {
+        // Default position if none saved
+        const saved = getSavedPos();
+        if (saved) {
+          applyPos(saved);
+        } else {
+          // Place near right side, 20% from top
+          const width = 320; // same as CSS
+          const margin = 32;
+          const left = Math.max(margin, window.innerWidth - width - margin);
+          const top = Math.round((window.innerHeight - panel.getBoundingClientRect().height) / 2);
+          panel.style.left = left + 'px';
+          panel.style.top = top + 'px';
+          panel.style.right = 'auto';
+          panel.classList.add('visible');
+        }
+      }
+
+      // Drag support
+      let dragging = false;
+      let startX = 0, startY = 0, origLeft = 0, origTop = 0;
+      let moved = false;
+      let rafId = null; let nextLeft = null; let nextTop = null;
+
+      function onDown(e) {
+        // Only left mouse or touch
+        if (e.button !== undefined && e.button !== 0) return;
+        const rect = panel.getBoundingClientRect();
+        dragging = true; moved = false;
+        startX = (e.touches ? e.touches[0].clientX : e.clientX);
+        startY = (e.touches ? e.touches[0].clientY : e.clientY);
+        origLeft = rect.left; origTop = rect.top;
+        // Ensure we use left/top (not right/transform)
+        panel.style.right = 'auto';
+        panel.style.transform = 'none';
+        panel.classList.add('dragging');
+        if (overlay) overlay.style.display = 'block';
+        // Prevent selecting other elements
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+      }
+      function onMove(e) {
+        if (!dragging) return;
+        const x = (e.touches ? e.touches[0].clientX : e.clientX);
+        const y = (e.touches ? e.touches[0].clientY : e.clientY);
+        const dx = x - startX; const dy = y - startY;
+        if (!moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) moved = true;
+        e.preventDefault();
+        let left = origLeft + dx; let top = origTop + dy;
+        // Defer DOM writes to next animation frame for smoothness
+        nextLeft = left; nextTop = top;
+        if (!rafId) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            // Clamp within viewport using current size
+            const rect = panel.getBoundingClientRect();
+            const maxLeft = window.innerWidth - rect.width;
+            const maxTop = window.innerHeight - rect.height;
+            let cl = Math.max(0, Math.min(maxLeft, nextLeft));
+            let ct = Math.max(0, Math.min(maxTop, nextTop));
+            panel.style.left = cl + 'px';
+            panel.style.top = ct + 'px';
+          });
+        }
+      }
+      function onUp() {
+        if (!dragging) return;
+        dragging = false;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
+        panel.classList.remove('dragging');
+        if (overlay) overlay.style.display = 'none';
+        document.body.style.userSelect = '';
+        savePos();
+      }
+
+      // Start drag from anywhere inside panel
+      panel.addEventListener('mousedown', onDown);
+      panel.addEventListener('touchstart', onDown, { passive: true });
+
+      // Prevent click-through if it was a drag
+      panel.addEventListener('click', function(ev) {
+        if (moved) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        moved = false;
+      }, true);
+
+      // Minimize/restore
+      minimizeBtn.addEventListener('click', function(e){ e.stopPropagation(); minimize(); });
+      restoreBtn.addEventListener('click', function(e){ e.preventDefault(); restore(); });
+
+      // Re-clamp on resize
+      window.addEventListener('resize', function(){
+        // Reapply from saved anchor so height/viewport changes don't drift position
+        const saved = getSavedPos();
+        if (saved) applyPos(saved);
+        savePos();
+      });
+
+      // Expose a one-shot reapply to be called after content height changes
+      window.__reapplyStatsPanelPosition = function(){
+        const saved = getSavedPos();
+        if (saved) applyPos(saved);
+      };
+    }
   </script>
 </body>
 </html>
