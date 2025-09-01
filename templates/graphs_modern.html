@@ -69,6 +69,8 @@
             <option value="last_day">Last Day</option>
             <option value="last_week">Last Week</option>
             <option value="last_month">Last Month</option>
+            <option value="last_90_days">Last 90 Days</option>
+            <option value="last_180_days">Last 180 Days</option>
             <option value="last_year">Last Year</option>
             <option value="custom">Custom Date</option>
           </select>
@@ -458,6 +460,30 @@
               const currentYear = new Date().getFullYear();
               displayText = `Year ${currentYear - 1}`;
               break;
+            case 'last_90_days':
+              if (data.success && data.date_str) {
+                const end = new Date(data.date_str);
+                const start = new Date(end);
+                start.setDate(start.getDate() - 90);
+                const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                displayText = `${startStr} → ${endStr}`;
+              } else {
+                displayText = 'Last 90 days';
+              }
+              break;
+            case 'last_180_days':
+              if (data.success && data.date_str) {
+                const end = new Date(data.date_str);
+                const start = new Date(end);
+                start.setDate(start.getDate() - 180);
+                const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                displayText = `${startStr} → ${endStr}`;
+              } else {
+                displayText = 'Last 180 days';
+              }
+              break;
               
             default:
               displayText = 'Data range';
@@ -694,6 +720,21 @@
               plotDiv.on('plotly_legendclick', legendClickHandler);
               plotDiv.on('plotly_legenddoubleclick', legendDoubleClickHandler);
             }
+
+            // If backend provided the exact pulled date range, reflect it in the "Showing" section
+            try {
+              const typeUsed = type;
+              if ((typeUsed === 'last_90_days' || typeUsed === 'last_180_days') && data && data.date_range) {
+                const rangeDisplay = document.getElementById('dateRangeDisplay');
+                const rangeText = document.getElementById('rangeText');
+                if (rangeDisplay && rangeText) {
+                  const start = new Date(data.date_range.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  const end = new Date(data.date_range.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  rangeDisplay.className = 'date-range-display';
+                  rangeText.textContent = `${start} → ${end}`;
+                }
+              }
+            } catch (e) { console.debug('Range display update skipped:', e); }
             
             // Success message
             showNotification(`Chart loaded successfully! (${trace.labels.length} members)`, "success");

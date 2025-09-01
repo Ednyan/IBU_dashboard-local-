@@ -415,6 +415,60 @@ def get_last_year_range():
     
     return standardize_range_formats(file_start, file_end)
 
+def get_last_90_days_range():
+    """Get chart data for exactly the last 90 days using local CSV files.
+    Requires an exact CSV file on both the computed start date and the end date (latest)."""
+    try:
+        latest_file_path, latest_date_str, _ = get_latest_csv_file()
+        if not latest_file_path or not latest_date_str:
+            return {"error": "No CSV files found for last 90 days calculation."}
+        try:
+            end_date = datetime.strptime(latest_date_str, "%Y-%m-%d").date()
+            start_date = end_date - timedelta(days=90)
+            start_date_str = start_date.strftime("%Y-%m-%d")
+        except ValueError:
+            return {"error": f"Invalid date format in latest file: {latest_date_str}"}
+
+        file_start = find_csv_file_by_date(start_date_str)
+        file_end = find_csv_file_by_date(latest_date_str)
+        if not file_start:
+            return {"error": f"Start date file not found for {start_date_str}. Cannot calculate last 90 days without an exact file on the start date."}
+        if not file_end:
+            return {"error": f"End date file not found for {latest_date_str}. Cannot calculate last 90 days without an exact file on the end date."}
+        data = standardize_range_formats(file_start, file_end)
+        if isinstance(data, dict):
+            data["date_range"] = {"start": start_date_str, "end": latest_date_str}
+        return data
+    except Exception as e:
+        return {"error": f"Error calculating last 90 days data: {str(e)}"}
+
+def get_last_180_days_range():
+    """Get chart data for exactly the last 180 days using local CSV files.
+    Requires an exact CSV file on both the computed start date and the end date (latest)."""
+    try:
+        latest_file_path, latest_date_str, _ = get_latest_csv_file()
+        if not latest_file_path or not latest_date_str:
+            return {"error": "No CSV files found for last 180 days calculation."}
+        try:
+            end_date = datetime.strptime(latest_date_str, "%Y-%m-%d").date()
+            start_date = end_date - timedelta(days=180)
+            start_date_str = start_date.strftime("%Y-%m-%d")
+        except ValueError:
+            return {"error": f"Invalid date format in latest file: {latest_date_str}"}
+
+        file_start = find_csv_file_by_date(start_date_str)
+        file_end = find_csv_file_by_date(latest_date_str)
+        if not file_start:
+            return {"error": f"Start date file not found for {start_date_str}. Cannot calculate last 180 days without an exact file on the start date."}
+        if not file_end:
+            return {"error": f"End date file not found for {latest_date_str}. Cannot calculate last 180 days without an exact file on the end date."}
+        data = standardize_range_formats(file_start, file_end)
+        if isinstance(data, dict):
+            data["date_range"] = {"start": start_date_str, "end": latest_date_str}
+        return data
+    except Exception as e:
+        return {"error": f"Error calculating last 180 days data: {str(e)}"}
+
 def get_chart_data_for_range(start_date, end_date):
     """Get chart data for a custom date range using local CSV files"""
     # Find the required CSV files in local folder
@@ -714,6 +768,16 @@ def get_chart_data():
         return jsonify(data)
     elif chart_type == "last_year":
         data = get_last_year_range()
+        if not data or "error" in data:
+            return jsonify({"error": "Not enough data available for the selected range."}), 400
+        return jsonify(data)
+    elif chart_type == "last_90_days":
+        data = get_last_90_days_range()
+        if not data or "error" in data:
+            return jsonify({"error": "Not enough data available for the selected range."}), 400
+        return jsonify(data)
+    elif chart_type == "last_180_days":
+        data = get_last_180_days_range()
         if not data or "error" in data:
             return jsonify({"error": "Not enough data available for the selected range."}), 400
         return jsonify(data)
@@ -2729,9 +2793,30 @@ def add_prediction_traces(traces, method, days):
         print(f"Prediction generation error: {e}")
 
 def aggregate_time_period(trends_data, time_period):
-    """Aggregate daily data into weekly, monthly, or yearly periods"""
+    """Aggregate daily data into weekly, monthly, yearly, or fixed window periods (90/180 days).
+    For 90/180 day aggregation, buckets are aligned using the earliest date across all series
+    as the anchor to ensure consistent bucket boundaries for comparison.
+    """
     aggregated_data = {}
-    
+
+    # Compute a global anchor date (earliest across all series) for fixed-length windows
+    anchor_date = None
+    try:
+        for series in trends_data.values():
+            for d in series.get('dates', []) or []:
+                dt = datetime.strptime(d, '%Y-%m-%d')
+                if anchor_date is None or dt < anchor_date:
+                    anchor_date = dt
+    except Exception:
+        anchor_date = None
+
+    # Determine window size (in days) for custom fixed windows
+    window_days = None
+    if time_period == '90_days':
+        window_days = 90
+    elif time_period == '180_days':
+        window_days = 180
+
     for member_name, data in trends_data.items():
         aggregated_data[member_name] = {
             'dates': [],
@@ -2755,7 +2840,13 @@ def aggregate_time_period(trends_data, time_period):
             date_obj = datetime.strptime(date_str, '%Y-%m-%d')
             
             # Determine period based on time_period
-            if time_period == 'weekly':
+            if window_days and anchor_date is not None:
+                # Fixed-length window (e.g., 90 or 180 days) anchored at earliest date
+                delta_days = (date_obj - anchor_date).days
+                bucket_index = delta_days // window_days
+                period_start = anchor_date + timedelta(days=bucket_index * window_days)
+                period_key = period_start.strftime('%Y-%m-%d')
+            elif time_period == 'weekly':
                 # Get Monday of the week
                 period_key = (date_obj - timedelta(days=date_obj.weekday())).strftime('%Y-%m-%d')
             elif time_period == 'monthly':
