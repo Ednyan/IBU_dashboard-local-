@@ -8,6 +8,7 @@ import os
 import json
 import threading
 from typing import List, Dict, Optional, Any
+import httpx
 
 class NotificationService:
     """
@@ -32,6 +33,16 @@ class NotificationService:
         # CSV tracking to prevent duplicate notifications
         self.last_processed_csv = self.notification_history.get('last_processed_csv', '')
         self.last_notification_date = self.notification_history.get('last_notification_date', '')
+
+        # Discord webhook configuration (optional)
+        self.discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
+        # Allow explicit enable/disable via env; default to enabled when URL provided
+        self.discord_enabled = os.getenv("DISCORD_NOTIFICATIONS_ENABLED", "auto").lower()
+        if self.discord_enabled not in ("true", "false"):
+            self.discord_enabled = "true" if self.discord_webhook_url else "false"
+        # Optional webhook profile customization (match email_to_discord.py)
+        self.discord_username = os.getenv("DISCORD_WEBHOOK_USERNAME", "").strip()
+        self.discord_avatar_url = os.getenv("DISCORD_WEBHOOK_AVATAR_URL", "").strip()
 
     @property
     def admin_emails(self) -> List[str]:
@@ -688,58 +699,167 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         if not self.sender_email or not self.sender_password:
             print("Email credentials not configured. Skipping email notification.")
             return False
-        
-        if not to_emails:
-            print("No recipient emails configured. Skipping email notification.")
-            return False
-        
         try:
-            # Create message
-            message = MIMEMultipart("alternative")
-            message["Subject"] = subject
-            message["From"] = formataddr(("IBU Assistant", self.sender_email))
-            message["To"] = ", ".join(to_emails)
-            
-            # Add both plain text and HTML parts
-            text_part = MIMEText(text_content, "plain")
-            html_part = MIMEText(html_content, "html")
-            
-            message.attach(text_part)
-            message.attach(html_part)
-            
-            # Create secure connection and send email
+            # Normalize recipients
+            recipients = [e for e in (to_emails or []) if isinstance(e, str) and e.strip()]
+            if not recipients:
+                print("No recipients provided. Skipping email notification.")
+                return False
+
+            # Build message
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = formataddr(("IBU Assistant", self.sender_email))
+            msg["To"] = ", ".join(recipients)
+
+            part_text = MIMEText(text_content or "", "plain", _charset="utf-8")
+            part_html = MIMEText(html_content or "", "html", _charset="utf-8")
+            msg.attach(part_text)
+            msg.attach(part_html)
+
             context = ssl.create_default_context()
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
                 server.starttls(context=context)
                 server.login(self.sender_email, self.sender_password)
-                server.send_message(message)
-            
-            print(f"Email notification sent successfully to: {', '.join(to_emails)}")
+                server.sendmail(self.sender_email, recipients, msg.as_string())
             return True
-            
         except Exception as e:
-            print(f"Error sending email notification: {e}")
+            print(f"Error sending email: {e}")
+            return False
+
+    # ---------- Discord Webhook Support ---------------------------------------
+    def _discord_post(self, payload: Dict) -> bool:
+        """Low-level POST to Discord webhook with simple retry on 429/5xx."""
+        if not self.discord_webhook_url or self.discord_enabled != "true":
+            return False
+        try:
+            # Use a short timeout and a tiny retry for rate-limit/server hiccups
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(self.discord_webhook_url, json=payload)
+                # Basic retry on 429/5xx once
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    wait = 1.0
+                    try:
+                        # If rate-limited, respect Retry-After seconds if present
+                        ra = resp.headers.get('Retry-After')
+                        if ra:
+                            wait = float(ra)
+                    except Exception:
+                        pass
+                    try:
+                        threading.Event().wait(wait)
+                    except Exception:
+                        pass
+                    resp = client.post(self.discord_webhook_url, json=payload)
+                if 200 <= resp.status_code < 300:
+                    return True
+                print(f"[Discord] webhook post failed: {resp.status_code} {resp.text[:200]}")
+                return False
+        except Exception as e:
+            print(f"[Discord] webhook error: {e}")
+            return False
+
+    def _build_discord_embed(self, title: str, description: str, color: int, fields: Optional[List[Dict]] = None) -> Dict:
+        embed: Dict[str, Any] = {
+            "title": title,
+            "description": description,
+            "color": color,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        if fields:
+            embed["fields"] = fields
+        return embed
+
+    def _send_discord_notification(self, event: str, member_data: Dict, subject: str, text_content: str) -> bool:
+        """Send a concise Discord message for member event (failed/passed/non_compliant)."""
+        if self.discord_enabled != "true" or not self.discord_webhook_url:
+            return False
+        try:
+            name = member_data.get('name', 'Unknown Member')
+            # Choose emoji/color per event
+            if event == 'failed':
+                emoji = '🚨'
+                color = 0xEF4444  # red-500
+                title = f"Probation Failure: {name}"
+            elif event == 'passed':
+                emoji = '🎉'
+                color = 0x22C55E  # green-500
+                title = f"Probation Passed: {name}"
+            else:
+                emoji = '⚠️'
+                color = 0x8B5CF6  # violet-500
+                title = f"Non-Compliant: {name}"
+
+            # Build a short description (first lines of text content)
+            summary = text_content.strip().splitlines()
+            # Take first 6 non-empty lines as summary
+            picked = []
+            for line in summary:
+                s = line.strip()
+                if s:
+                    picked.append(s)
+                if len(picked) >= 6:
+                    break
+            description = "\n".join(picked)
+
+            # Include a few key fields if available
+            fields: List[Dict[str, Any]] = []
+            # Member hyperlink to SheepIt profile
+            if name and name != 'Unknown Member':
+                try:
+                    display = str(name).replace('_', r'\_')
+                except Exception:
+                    display = str(name)
+                profile_url = f"https://www.sheepit-renderfarm.com/user/{name}/profile"
+                fields.append({"name": "Member", "value": f"[{display}]({profile_url})", "inline": True})
+            joined = member_data.get('joined_date') or member_data.get('joined_date_parsed')
+            if joined:
+                fields.append({"name": "Joined", "value": str(joined), "inline": True})
+            cp = member_data.get('current_points')
+            if cp is not None:
+                try:
+                    fields.append({"name": "Current Points", "value": f"{int(cp):,}", "inline": True})
+                except Exception:
+                    fields.append({"name": "Current Points", "value": str(cp), "inline": True})
+            pp = member_data.get('post_probation_status')
+            if pp:
+                fields.append({"name": "Post-Probation", "value": str(pp), "inline": True})
+
+            embed = self._build_discord_embed(f"{emoji} {title}", description, color, fields)
+            payload = {
+                "content": None,  # no extra content, embed only for neatness
+                "embeds": [embed]
+            }
+            # Apply optional profile overrides
+            if self.discord_username:
+                payload["username"] = self.discord_username
+            if self.discord_avatar_url:
+                payload["avatar_url"] = self.discord_avatar_url
+            # Send asynchronously so we don't block email flow
+            threading.Thread(target=self._discord_post, args=(payload,), daemon=True).start()
+            return True
+        except Exception as e:
+            print(f"[Discord] build/send error: {e}")
             return False
     
     def notify_probation_failure(self, member_data: Dict) -> bool:
         """Send probation failure notification"""
         member_name = member_data.get('name', 'Unknown')
-        
         # Check if we've already sent this notification
         if self.has_been_notified(member_name, "failed"):
             print(f"Already notified about {member_name} probation failure. Skipping duplicate.")
             return True
-        
         # Create email content
         subject, html_content, text_content = self.create_failure_email(member_data)
-        
         # Send email
         recipients = self.get_recipients_for('failed')
         success = self.send_email(recipients, subject, html_content, text_content)
-        #if success:
-        #    self.mark_as_notified(member_name, "failed")
+        # Mirror to Discord (best-effort, independent of email success)
+        self._send_discord_notification('failed', member_data, subject, text_content)
+        # if success:
+        #     self.mark_as_notified(member_name, "failed")
         return success
-    
+
     def notify_probation_passed(self, member_data: Dict) -> bool:
         """Send probation passed notification"""
         member_name = member_data.get('name', 'Unknown')
@@ -749,8 +869,9 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         subject, html_content, text_content = self.create_passed_email(member_data)
         recipients = self.get_recipients_for('passed')
         success = self.send_email(recipients, subject, html_content, text_content)
-        #if success:
-        #    self.mark_as_notified(member_name, "passed")
+        self._send_discord_notification('passed', member_data, subject, text_content)
+        # if success:
+        #     self.mark_as_notified(member_name, "passed")
         return success
 
     def notify_non_compliant(self, member_data: Dict) -> bool:
@@ -762,8 +883,9 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         subject, html_content, text_content = self.create_non_compliant_email(member_data)
         recipients = self.get_recipients_for('non_compliant')
         success = self.send_email(recipients, subject, html_content, text_content)
-        #if success:
-        #    self.mark_as_notified(member_name, "non_compliant")
+        self._send_discord_notification('non_compliant', member_data, subject, text_content)
+        # if success:
+        #     self.mark_as_notified(member_name, "non_compliant")
         return success
 
     def check_and_notify_failures(self, members_data: List[Dict], current_csv_file: str = None):
