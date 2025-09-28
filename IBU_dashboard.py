@@ -35,7 +35,7 @@ DATA_FOLDER = os.getenv("DATA_FOLDER", "Scraped_Team_Info")
 TEAMS_POINTS_FOLDER = os.getenv("SCRAPED_TEAMS_POINTS_FOLDER", "Scraped_Teams_Points")
 
 progress_queue = queue.Queue()
-layout_height = 550
+layout_height = 700
 layout_width = 1000  # aspect_ratio variable removed (unused)
 
 # --- Probation Overrides (external file) ------------------------------------
@@ -532,7 +532,7 @@ def data_for_return(data_member, data_points, color_data):
             "hole": 0.6,
             "text": get_custom_text(data_points, data_member),
             "textinfo": "text",
-            "textposition": "outside",
+            "textposition": "inside",
             "hoverinfo": "label+percent+value",
             "hovertemplate": "<b>%{label}</b><br>" +
                            "Points: %{value:,}<br>" +
@@ -552,7 +552,7 @@ def data_for_return(data_member, data_points, color_data):
     "layout": {
         "width": layout_width,
         "height": layout_height, 
-        "margin": {"t": 30, "b": 30, "l": 0, "r": 0},
+        "margin": {"t": 50, "b": 50, "l": 0, "r": 0},
         "showlegend": True,
         "paper_bgcolor": "rgba(0,0,0,0)",
         "plot_bgcolor": "rgba(0,0,0,0)",
@@ -2772,7 +2772,11 @@ def add_prediction_traces(traces, method, days):
             for i in range(1, days+1):
                 future_date = last_date + timedelta(days=i)
                 future_dates.append(future_date.strftime('%Y-%m-%d'))
-                future_values.append(predict(last_index + i))
+                # Clamp predictions at zero to avoid negative values
+                y_pred = predict(last_index + i)
+                if y_pred < 0:
+                    y_pred = 0
+                future_values.append(y_pred)
 
             pred_trace = {
                 'name': f"{trace['name']} (Prediction)",
