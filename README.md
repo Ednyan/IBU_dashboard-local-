@@ -8,8 +8,7 @@
 ## Dev Quickstart
 - Clone this repo.
 - Run `./scripts/setup.sh` To make a venv, and install deps.
-- Run `./scripts/run.sh` to run with a wsgi server, or `./scripts/run-dev.sh` to run with the built in flask webserver.
-
+- Run `./scripts/run.sh` to run with a wsgi server, or `./scripts/run-dev.sh` to run with the built in flask webserver. You can also run manually with `./.venv/bin/python IBU_dashboard.py`
 
 ## 🎯 What is IBU?
 
