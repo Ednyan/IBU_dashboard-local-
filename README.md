@@ -5,6 +5,12 @@
 
 > **A modern, cinematic web dashboard for tracking SheepIt Render Farm team performance and statistics.**
 
+## Dev Quickstart
+- Clone this repo.
+- Run `./scripts/setup.sh` To make a venv, and install deps.
+- Run `./scripts/run.sh` to run with a wsgi server, or `./scripts/run-dev.sh` to run with the built in flask webserver.
+
+
 ## 🎯 What is IBU?
 
 **IBU (Intelligent Beings United)** is a collaborative team on [SheepIt Render Farm](https://www.sheepit-renderfarm.com/) - a distributed computing project that helps Blender artists render their 3D animations and images by sharing computational resources across a global network of volunteers.
