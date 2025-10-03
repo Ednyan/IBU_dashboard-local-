@@ -666,8 +666,12 @@ def _email_to_discord_worker(interval_sec: int):
     logging.getLogger().setLevel(logging.INFO)
     while not _email_discord_stop.is_set():
         try:
-            if _EMAIL_TO_DISCORD_AVAILABLE and EMAIL_TO_DISCORD_ENABLED:
+            # Only run if all required env vars exist
+            required_vars = ["IMAP_USER", "IMAP_PASS", "IMAP_SERVER", "DISCORD_WEBHOOK_URL"]
+            if _EMAIL_TO_DISCORD_AVAILABLE and all(os.getenv(v) for v in required_vars) and EMAIL_TO_DISCORD_ENABLED:
                 _email_to_discord_run_once()
+            else:
+                logging.info("[Email→Discord] Skipping worker: missing environment variables")
         except Exception as e:
             logging.exception("[Email→Discord] Worker error: %s", e)
         # Sleep in 1s ticks so we can stop quickly
