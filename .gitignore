@@ -69,3 +69,8 @@ discord_bot/
 # 📦 Distribution files
 *.tar.gz
 *.zip
+
+
+# Added by cargo
+
+/target
