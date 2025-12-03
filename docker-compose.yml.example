@@ -1,0 +1,20 @@
+services:
+  ibu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ibu-dashboard
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./docker/data/scraped_team_info:/ibu/Scraped_Team_Info
+      - ./docker/data/scraped_teams_points:/ibu/Scraped_Teams_Points
+      - ./docker/config:/ibu/config
+      - ./docker/logs/cron.log:/ibu/cron.log
+      - ./docker/notification_history.json:/ibu/notification_history.json

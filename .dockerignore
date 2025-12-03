@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+.git
+docker
+docs
+Scraped_Team_Info
+Scraped_Teams_Points
+target
+*.md
+config
+notification_history.json

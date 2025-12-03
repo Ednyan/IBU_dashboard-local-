@@ -13,3 +13,7 @@ discord_bot/
 
 # Rust
 /target
+
+# Docker 
+docker-compose.yml
+docker
