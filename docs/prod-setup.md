@@ -28,6 +28,5 @@
 ## Instructions
 
 - Clone this repo.
-- Edit `docker-compose.yml.example` and save it as `docker-compose.yml`
 - Create a `docker-compose.yml` and `.env` file. There are example templates you can use for both.
 - Run `docker compose up -d --build`
