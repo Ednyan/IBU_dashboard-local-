@@ -18,7 +18,7 @@ SCRAPED_TEAMS_POINTS_FOLDER = os.getenv("SCRAPED_TEAMS_POINTS_FOLDER", "Scraped_
 LOGIN_URL = "https://www.sheepit-renderfarm.com/user/authenticate"
 TEAM_URL = os.getenv("SHEEPIT_TEAM_URL", "https://www.sheepit-renderfarm.com/team/2109")
 TEAMS_POINTS_URL = os.getenv("SHEEPIT_TEAMS_POINTS_URL", "https://www.sheepit-renderfarm.com/team")
-IBU_DASHBOARD_URL = os.getenv("IBU_DASHBOARD_URL", "")
+TEAM_PROBATION_URL = os.getenv("TEAM_PROBATION_URL", "")
 
 # Login credentials from environment variables
 USERNAME = os.getenv("SHEEPIT_USERNAME", "your_username_here")
@@ -258,14 +258,14 @@ def save_team_data_to_csv(team_data):
 
 def trigger_notifications():
     """Trigger notification processing by calling the probation data endpoint"""
-    if not IBU_DASHBOARD_URL:
+    if not TEAM_PROBATION_URL:
         print("⚠️  IBU Dashboard URL not configured in .env file")
         return False
     
     try:
         
         print(f"📧 Triggering notification processing...")
-        response = requests.get(IBU_DASHBOARD_URL, timeout=60)
+        response = requests.get(TEAM_PROBATION_URL, timeout=60)
         
         if response.status_code == 200:
             print(f"✅ Successfully triggered notification processing")
