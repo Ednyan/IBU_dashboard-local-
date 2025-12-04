@@ -18,3 +18,4 @@ services:
       - ./docker/config:/ibu/config
       - ./docker/logs/:/ibu/logs
       - ./docker/notification_history/:/ibu/notification_history/
+      - /etc/localtime:/etc/localtime:ro
