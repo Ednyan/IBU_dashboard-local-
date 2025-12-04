@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-./.venv/bin/maturin develop
+./.venv/bin/maturin develop --release --locked
