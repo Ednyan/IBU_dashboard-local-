@@ -10,7 +10,7 @@ discord_bot/
 .env
 .vscode/
 *.json
-
+notification_history
 # Rust
 /target
 

@@ -27,7 +27,10 @@ class NotificationService:
         self.admin_recipients = self.load_admin_emails()
 
         # Notification settings
-        self.notifications_file = "notification_history.json"
+        notifications_path = Path("notification_history/history.json")
+        notifications_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.notifications_file = str(notifications_path)
         self.notification_history = self.load_notification_history()
 
         # CSV tracking to prevent duplicate notifications

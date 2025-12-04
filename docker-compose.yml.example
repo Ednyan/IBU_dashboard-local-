@@ -16,5 +16,5 @@ services:
       - ./docker/data/scraped_team_info:/ibu/Scraped_Team_Info
       - ./docker/data/scraped_teams_points:/ibu/Scraped_Teams_Points
       - ./docker/config:/ibu/config
-      - ./docker/logs/cron.log:/ibu/cron.log
-      - ./docker/notification_history.json:/ibu/notification_history.json
+      - ./docker/logs/:/ibu/logs
+      - ./docker/notification_history/:/ibu/notification_history/
