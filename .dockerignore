@@ -1,12 +1,24 @@
+# Python 
 .venv
 __pycache__
 *.pyc
+
+# git
 .git
-docker
-docs
+
+# Docker 
+docker*
+.dockerignore
+
+# Mounted Folders
 Scraped_Team_Info
 Scraped_Teams_Points
+config
+
+# Misc
+docs
 target
 *.md
-config
 notification_history.json
+.env*
+LICENSE
