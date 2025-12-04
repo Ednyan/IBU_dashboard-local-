@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 
 # Python setup
-echo "Creating venv"
-python3 -m venv .venv
-echo "Installing deps"
-./.venv/bin/python -m pip install -r requirements.txt
+if [[ "$1" == "uv" ]]; then
+    echo "Creating venv"
+    uv venv .venv
+    echo "Installing deps"
+    uv pip install -r requirements.txt --python .venv/bin/python
+else
+    echo "Creating venv"
+    python3 -m venv .venv
+    echo "Installing deps"
+    ./.venv/bin/python -m pip install -r requirements.txt
+fi
+
 
 # Rust setup
 ./scripts/build.sh
