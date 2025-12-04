@@ -9,6 +9,7 @@ import json
 import threading
 from typing import List, Dict, Optional, Any
 import httpx
+from pathlib import Path
 
 class NotificationService:
     """
