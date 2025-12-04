@@ -5,7 +5,7 @@ RUN rustup default stable
 
 WORKDIR /ibu
 COPY . .
-RUN ./scripts/setup.sh
+RUN ./scripts/setup.sh uv
 RUN cargo clean
 
 RUN mkdir -p /var/spool/cron
