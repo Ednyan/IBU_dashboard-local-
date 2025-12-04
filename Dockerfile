@@ -1,6 +1,6 @@
 FROM archlinux:latest
 
-RUN pacman -Syu --noconfirm rustup uv python cronie && pacman -Scc --noconfirm 
+RUN pacman -Syu --noconfirm rustup uv python cronie base-devel && pacman -Scc --noconfirm 
 RUN rustup default stable
 
 WORKDIR /ibu
