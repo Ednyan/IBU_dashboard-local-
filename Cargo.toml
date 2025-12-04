@@ -7,4 +7,9 @@ edition = "2024"
 name = "rustlibs"
 
 [dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
 pyo3 = { version = "0.27.2", features = ["extension-module"] }
+csv = "1.4.0"
+dotenvy = "0.15.7"
+glob = "0.3.3"

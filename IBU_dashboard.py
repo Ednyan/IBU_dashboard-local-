@@ -17,6 +17,9 @@ import logging
 import time
 from dotenv import load_dotenv
 
+# Rust imports
+from rustlibs import get_csv_files_from_folder
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -139,26 +142,6 @@ def normalize_member_points_columns(df: pd.DataFrame) -> pd.DataFrame:
         print(f"normalize_member_points_columns error: {e}")
         return df
 
-def get_csv_files_from_folder():
-    """
-    Get all CSV files from the local Scraped_Team_Info folder
-    """
-    try:
-        if not os.path.exists(DATA_FOLDER):
-            return []
-        
-        # Get all CSV files matching the pattern sheepit_team_points_YYYY-MM-DD.csv
-        pattern = os.path.join(DATA_FOLDER, "sheepit_team_points_*.csv")
-        csv_files = glob.glob(pattern)
-        
-        # Sort by filename (which contains date) to get most recent first
-        csv_files.sort(reverse=True)
-        
-        return csv_files
-        
-    except Exception as e:
-        print(f"Error getting CSV files from folder: {str(e)}")
-        return []
 
 def get_team_points_files_from_folder():
     """Return list of team rankings CSV files (sheepit_teams_points_YYYY-MM-DD.csv) sorted ascending by date."""
