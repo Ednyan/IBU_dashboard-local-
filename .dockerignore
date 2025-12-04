@@ -4,7 +4,7 @@ __pycache__
 *.pyc
 
 # git
-.git
+.git*
 
 # Docker 
 docker*
