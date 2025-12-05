@@ -2,9 +2,9 @@ Flask
 pandas
 requests
 beautifulsoup4
-python-dotenv==1.0.1
-discord.py==2.4.0
-httpx==0.27.0
+python-dotenv==1.2.1
+discord.py==2.6.4
+httpx==0.28.1
 playwright
 maturin
 pyuwsgi
