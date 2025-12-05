@@ -20,5 +20,4 @@ docs
 target
 *.md
 notification_history.json
-.env*
 LICENSE
