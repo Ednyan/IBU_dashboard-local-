@@ -1,6 +1,5 @@
 import os
 import re
-import io
 import json
 import time
 import imaplib

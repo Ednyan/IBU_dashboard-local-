@@ -698,7 +698,7 @@ Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         else:
             html_content += "<p>No post-probation period data available.</p>"
 
-        html_content += f"""
+        html_content += """
                 <p>This member is non-compliant in the post-probation phase.<br>
                 <strong>Reason:</strong> Did not meet the required performance in the last period.</p>
             </div>
@@ -1014,7 +1014,7 @@ Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
             return
 
         # Process all member types
-        print(f"📬 Processing notifications for all member types...")
+        print("📬 Processing notifications for all member types...")
 
         notifications_sent = 0
 

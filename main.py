@@ -189,7 +189,8 @@ def _sanitize_team_name(name: str) -> str:
         if name is None:
             return ""
         # Normalize unicode form
-        import unicodedata, re as _re
+        import unicodedata
+        import re as _re
 
         n = unicodedata.normalize("NFKC", str(name)).lower()
         # Replace non-alphanumeric with space
@@ -1104,7 +1105,7 @@ def list_files():
 def cleanup_on_exit():
     """Clean up function for graceful shutdown"""
     try:
-        print(f"\nShutting down IBU Dashboard...")
+        print("\nShutting down IBU Dashboard...")
         print("No temporary files to clean up (using local folder)")
     except Exception as e:
         print(f"Error during cleanup: {str(e)}")
@@ -1428,7 +1429,7 @@ def get_member_probation_status():
                         if file_date >= month_1_date and month_1_points is None:
                             month_1_points = points_at_date
 
-                    except Exception as e:
+                    except Exception:
                         continue
 
                 # Calculate remaining points needed (always show actual remaining, even after deadline)
@@ -1700,7 +1701,7 @@ def get_member_probation_status():
                                     ):
                                         break
 
-                                except Exception as e:
+                                except Exception:
                                     continue
 
                             # Calculate points earned in this period - ONLY if we have EXACT boundary data
@@ -1946,7 +1947,7 @@ def get_member_probation_status():
 
                 members_status.append(member_status)
 
-            except Exception as e:
+            except Exception:
                 continue
 
         # Sort by probation status priority and days since joined

@@ -300,11 +300,11 @@ def trigger_notifications():
         return False
 
     try:
-        print(f"📧 Triggering notification processing...")
+        print("📧 Triggering notification processing...")
         response = requests.get(TEAM_PROBATION_URL, timeout=60)
 
         if response.status_code == 200:
-            print(f"✅ Successfully triggered notification processing")
+            print("✅ Successfully triggered notification processing")
             return True
         else:
             print(
