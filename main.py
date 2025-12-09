@@ -727,7 +727,7 @@ def index():
             time_ago = "Recently"
     
     print(f"Latest file: {latest_file}, Date: {latest_date}, Time ago: {time_ago}")
-    return render_template('index_IBU.html', 
+    return render_template('index.html', 
                          saved_file=latest_file, 
                          latest_date=latest_date,
                          time_ago=time_ago)
@@ -799,7 +799,7 @@ def visualization():
         time_ago = "Recently"
     
     # Don't pre-load chart data - let the frontend handle it via AJAX
-    return render_template("graphs_modern.html", 
+    return render_template("graphs-modern.html", 
                          labels=[], 
                          values=[], 
                          colors=[], 
@@ -1677,13 +1677,13 @@ def member_info():
             latest_date = "No data"
             time_ago = "Unknown"
         
-        return render_template('member_info.html', 
+        return render_template('member-info.html', 
                              latest_date=latest_date, 
                              time_ago=time_ago)
         
     except Exception as e:
         print(f"Error in member_info route: {str(e)}")
-        return render_template('member_info.html', 
+        return render_template('member-info.html', 
                              latest_date="Error", 
                              time_ago="Error")
 
@@ -1788,14 +1788,14 @@ def test_notification():
     except Exception as e:
         return jsonify({"error": f"Error sending test notification: {str(e)}"})
 
-@app.route('/notification_admin')
+@app.route('/notification-admin')
 def notification_admin():
     """Admin panel for notification system - requires authentication"""
     # Check if user is authenticated
     if not session.get('admin_authenticated'):
         return redirect(url_for('admin_login'))
     
-    return render_template('notification_admin.html')
+    return render_template('notification-admin.html')
 
 @app.route('/api/admin/emails', methods=['GET', 'POST', 'DELETE', 'PATCH'])
 def api_admin_emails():
@@ -1947,9 +1947,9 @@ def admin_login():
             session['admin_authenticated'] = True
             return redirect(url_for('notification_admin'))
         else:
-            return render_template('admin_login.html', error='Invalid password')
+            return render_template('admin-login.html', error='Invalid password')
     
-    return render_template('admin_login.html')
+    return render_template('admin-login.html')
 
 @app.route('/admin_logout')
 def admin_logout():
