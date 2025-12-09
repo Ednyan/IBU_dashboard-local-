@@ -329,11 +329,11 @@ class NotificationService:
         failed_milestones = []
         milestones = member_data.get("milestones", {})
 
-        if milestones.get("week_1", {}).get("passed") == False:
+        if not milestones.get("week_1", {}).get("passed"):
             failed_milestones.append("First Week (250K points)")
-        if milestones.get("month_1", {}).get("passed") == False:
+        if not milestones.get("month_1", {}).get("passed"):
             failed_milestones.append("First Month (1M points)")
-        if milestones.get("month_3", {}).get("passed") == False:
+        if not milestones.get("month_3", {}).get("passed"):
             failed_milestones.append("Three Months (3M points)")
 
         failed_text = (
@@ -399,10 +399,10 @@ class NotificationService:
             if points_at_deadline is None:
                 points_at_deadline = current_points
 
-            if passed == True:
+            if passed:
                 status_class = "passed"
                 status_text = "✅ PASSED"
-            elif passed == False:
+            elif not passed:
                 status_class = "failed"
                 status_text = "❌ FAILED"
             else:
@@ -453,11 +453,7 @@ Milestone Status:
                 points_at_deadline = current_points
 
             status_text = (
-                "PASSED"
-                if passed == True
-                else "FAILED"
-                if passed == False
-                else "IN PROGRESS"
+                "PASSED" if passed else "FAILED" if not passed else "IN PROGRESS"
             )
             text_content += f"- {title}: {status_text} (Target: {target}, Achieved: {points_at_deadline:,})\n"
 
@@ -491,16 +487,13 @@ Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         failed_milestones = []
         milestones = member_data.get("milestones", {})
 
-        if milestones.get("week_1", {}).get("passed") == False:
+        if not milestones.get("week_1", {}).get("passed"):
             failed_milestones.append("First Week (250K points)")
-        if milestones.get("month_1", {}).get("passed") == False:
+        if not milestones.get("month_1", {}).get("passed"):
             failed_milestones.append("First Month (1M points)")
-        if milestones.get("month_3", {}).get("passed") == False:
+        if not milestones.get("month_3", {}).get("passed"):
             failed_milestones.append("Three Months (3M points)")
 
-        failed_text = (
-            ", ".join(failed_milestones) if failed_milestones else "Unknown milestone"
-        )
         # Create HTML email content
         html_content = f"""
             <html>
@@ -559,10 +552,10 @@ Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
             if points_at_deadline is None:
                 points_at_deadline = current_points
 
-            if passed == True:
+            if passed:
                 status_class = "passed"
                 status_text = "✅ PASSED"
-            elif passed == False:
+            elif not passed:
                 status_class = "failed"
                 status_text = "❌ FAILED"
             else:

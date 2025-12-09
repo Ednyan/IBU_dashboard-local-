@@ -1523,18 +1523,14 @@ def get_member_probation_status():
                 probation_status = "in_progress"
 
                 # Check if they completed all probation (passed all 3 milestones)
-                if (
-                    week_1_passed == True
-                    and month_1_passed == True
-                    and month_3_passed == True
-                ):
+                if week_1_passed and month_1_passed and month_3_passed:
                     probation_status = "passed"
                 # Check if they failed any milestone (only if deadline has passed AND they failed)
-                elif current_date >= month_3_date and month_3_passed == False:
+                elif not current_date >= month_3_date and month_3_passed:
                     probation_status = "failed"
-                elif current_date >= month_1_date and month_1_passed == False:
+                elif not current_date >= month_1_date and month_1_passed:
                     probation_status = "failed"
-                elif current_date >= week_1_date and week_1_passed == False:
+                elif not current_date >= week_1_date and week_1_passed:
                     probation_status = "failed"
 
                 # Post-probation compliance tracking (only for members who passed probation)
@@ -2031,7 +2027,6 @@ def check_probation_cache():
 
     # Check the cache to see if it needs to recompute
     if os.path.exists(MEMBER_INFO_CACHE_FILE):
-        cache_mtime = os.path.getmtime(MEMBER_INFO_CACHE_FILE)
         with open(MEMBER_INFO_CACHE_FILE) as f:
             cached = json.load(f)
         cached_csv_count = cached.get("_csv_count", 0)
@@ -3498,12 +3493,12 @@ def prepare_candlestick_data(trends_data, value_mode="cumulative", time_period="
             )
         else:
             o = data.get("open") or points_list
-            h = data.get("high") or points_list
-            l = data.get("low") or points_list
+            high = data.get("high") or points_list
+            low = data.get("low") or points_list
             c = data.get("close") or points_list
             open_vals = o
-            high_vals = h
-            low_vals = l
+            high_vals = high
+            low_vals = low
             close_vals = c
             hover_template = "<b>%{meta}</b><br>Period: %{x}<br>O: %{open:,}<br>H: %{high:,}<br>L: %{low:,}<br>C: %{close:,}<extra></extra>"
         base_color = name_to_color(member_name)
@@ -3555,19 +3550,19 @@ def prepare_candlestick_data(trends_data, value_mode="cumulative", time_period="
             )  # at least 0.5 (points) or 0.1% of range
             expanded_base = []
             expanded_height = []
-            for h, l in zip(high_vals, low_vals):
-                span = h - l
+            for high, low in zip(high_vals, low_vals):
+                span = high - low
                 if span <= 0:
                     # Flat candle: create a small vertical hoverable band centered around the flat value
                     span_eff = min_span
-                    lower = l - span_eff / 2.0
+                    lower = low - span_eff / 2.0
                     if lower < 0:
                         lower = 0
                     expanded_base.append(lower)
                     expanded_height.append(span_eff)
                 else:
                     extra = span * 0.01  # total 1% extra
-                    lower = l - extra * 0.5
+                    lower = low - extra * 0.5
                     if lower < 0:
                         lower = 0
                     expanded_base.append(lower)
