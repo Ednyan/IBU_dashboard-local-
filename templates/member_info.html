@@ -6,9 +6,9 @@
   <title>I.B.U MEMBER INFO</title>
   
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='IBU_SMILE_ICON.svg') }}">
-  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='graphs_modern.css') }}">
-  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='member_info.css') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='ibu-icon.svg') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='graphs-modern.css') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='member-info.css') }}">
 
 </head>
 <body>
@@ -88,7 +88,7 @@
   <!-- Scripts -->
   <script>
   // Static asset URLs available to JS
-  const SHEEPIT_ICON_URL = "{{ url_for('static', filename='sheepit_logo.svg') }}";
+  const SHEEPIT_ICON_URL = "{{ url_for('static', filename='sheepit-logo.svg') }}";
     // Basic HTML escaping to safely insert dynamic text in attributes/HTML
   function escapeHtml(s) {
       if (s === undefined || s === null) return '';
