@@ -11,11 +11,12 @@ from typing import List, Dict, Optional, Any
 import httpx
 from pathlib import Path
 
+
 class NotificationService:
     """
     Service for sending email notifications about member probation status changes
     """
-    
+
     def __init__(self):
         # Email configuration - you can set these as environment variables
         self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -23,7 +24,9 @@ class NotificationService:
         self.sender_email = os.getenv("SENDER_EMAIL", "")
         self.sender_password = os.getenv("SENDER_PASSWORD", "")
         # Recipients configuration - managed via JSON file (not .env)
-        self.admin_emails_file = os.getenv("ADMIN_EMAILS_FILE", os.path.join("config", "admin_emails.json"))
+        self.admin_emails_file = os.getenv(
+            "ADMIN_EMAILS_FILE", os.path.join("config", "admin_emails.json")
+        )
         # recipients stored as list of {"email": str, "prefs": {"failed": bool, "passed": bool, "non_compliant": bool}}
         self.admin_recipients = self.load_admin_emails()
 
@@ -35,13 +38,19 @@ class NotificationService:
         self.notification_history = self.load_notification_history()
 
         # CSV tracking to prevent duplicate notifications
-        self.last_processed_csv = self.notification_history.get('last_processed_csv', '')
-        self.last_notification_date = self.notification_history.get('last_notification_date', '')
+        self.last_processed_csv = self.notification_history.get(
+            "last_processed_csv", ""
+        )
+        self.last_notification_date = self.notification_history.get(
+            "last_notification_date", ""
+        )
 
         # Discord webhook configuration (optional)
         self.discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
         # Allow explicit enable/disable via env; default to enabled when URL provided
-        self.discord_enabled = os.getenv("DISCORD_NOTIFICATIONS_ENABLED", "auto").lower()
+        self.discord_enabled = os.getenv(
+            "DISCORD_NOTIFICATIONS_ENABLED", "auto"
+        ).lower()
         if self.discord_enabled not in ("true", "false"):
             self.discord_enabled = "true" if self.discord_webhook_url else "false"
         # Optional webhook profile customization (match email_to_discord.py)
@@ -59,19 +68,21 @@ class NotificationService:
     def _normalize_recipients(self, data: Any) -> List[Dict[str, Any]]:
         """Normalize raw JSON data into list of recipient dicts with prefs."""
         recipients: List[Dict[str, Any]] = []
-        if isinstance(data, dict) and 'admin_emails' in data:
-            data = data.get('admin_emails')
+        if isinstance(data, dict) and "admin_emails" in data:
+            data = data.get("admin_emails")
         if isinstance(data, list):
             for item in data:
                 if isinstance(item, str):
                     email = item.strip()
                     if email:
-                        recipients.append({"email": email, "prefs": self._default_prefs().copy()})
+                        recipients.append(
+                            {"email": email, "prefs": self._default_prefs().copy()}
+                        )
                 elif isinstance(item, dict):
-                    email = str(item.get('email', '')).strip()
+                    email = str(item.get("email", "")).strip()
                     if not email:
                         continue
-                    prefs = item.get('prefs') or {}
+                    prefs = item.get("prefs") or {}
                     norm_prefs = self._default_prefs()
                     for k in list(norm_prefs.keys()):
                         if k in prefs:
@@ -83,7 +94,7 @@ class NotificationService:
         """Load admin recipients with preferences from JSON; backward compatible with list-of-strings."""
         try:
             if os.path.exists(self.admin_emails_file):
-                with open(self.admin_emails_file, 'r', encoding='utf-8') as f:
+                with open(self.admin_emails_file, "r", encoding="utf-8") as f:
                     raw = json.load(f)
                     recips = self._normalize_recipients(raw)
                     return recips
@@ -96,11 +107,11 @@ class NotificationService:
         """Save admin recipients (with prefs) to JSON file. Ensures folder exists."""
         try:
             recips = []
-            for r in (recipients or []):
-                email = str(r.get('email', '')).strip()
+            for r in recipients or []:
+                email = str(r.get("email", "")).strip()
                 if not email:
                     continue
-                prefs = r.get('prefs') or {}
+                prefs = r.get("prefs") or {}
                 # normalize prefs
                 norm = self._default_prefs()
                 for k in norm.keys():
@@ -112,7 +123,7 @@ class NotificationService:
             if d and not os.path.exists(d):
                 os.makedirs(d, exist_ok=True)
             tmp = self.admin_emails_file + ".tmp"
-            with open(tmp, 'w', encoding='utf-8') as f:
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(recips, f, indent=2, ensure_ascii=False)
             os.replace(tmp, self.admin_emails_file)
             self.admin_recipients = recips
@@ -127,16 +138,16 @@ class NotificationService:
             return False
 
     def get_all_emails(self) -> List[str]:
-        return [r.get('email') for r in (self.admin_recipients or []) if r.get('email')]
+        return [r.get("email") for r in (self.admin_recipients or []) if r.get("email")]
 
     def add_admin_emails(self, emails):
         """Add one or more emails (string or list). Defaults prefs to all True. Returns bool."""
-        curr = {r['email']: r for r in (self.admin_recipients or []) if r.get('email')}
+        curr = {r["email"]: r for r in (self.admin_recipients or []) if r.get("email")}
         to_add = emails if isinstance(emails, list) else [emails]
         for e in to_add:
             if isinstance(e, dict):
-                email = str(e.get('email', '')).strip()
-                prefs = e.get('prefs') or {}
+                email = str(e.get("email", "")).strip()
+                prefs = e.get("prefs") or {}
             else:
                 email = str(e).strip()
                 prefs = {}
@@ -145,8 +156,8 @@ class NotificationService:
             if email in curr:
                 # merge prefs if provided
                 if prefs:
-                    merged = curr[email]['prefs']
-                    for k, v in (prefs.items()):
+                    merged = curr[email]["prefs"]
+                    for k, v in prefs.items():
                         if k in merged:
                             merged[k] = bool(v)
             else:
@@ -159,8 +170,8 @@ class NotificationService:
 
     def remove_admin_emails(self, emails):
         """Remove one or more emails from the list."""
-        curr = {r['email']: r for r in (self.admin_recipients or []) if r.get('email')}
-        for e in (emails if isinstance(emails, list) else [emails]):
+        curr = {r["email"]: r for r in (self.admin_recipients or []) if r.get("email")}
+        for e in emails if isinstance(emails, list) else [emails]:
             s = str(e).strip()
             if s in curr:
                 del curr[s]
@@ -175,15 +186,15 @@ class NotificationService:
 
     def update_admin_email_prefs(self, email: str, prefs: Dict[str, bool]) -> bool:
         """Update preference flags for a given email."""
-        email = str(email or '').strip()
+        email = str(email or "").strip()
         if not email:
             return False
         found = False
-        for r in (self.admin_recipients or []):
-            if r.get('email') == email:
+        for r in self.admin_recipients or []:
+            if r.get("email") == email:
                 for k in ["failed", "passed", "non_compliant"]:
                     if k in prefs:
-                        r['prefs'][k] = bool(prefs[k])
+                        r["prefs"][k] = bool(prefs[k])
                 found = True
                 break
         if not found:
@@ -204,35 +215,37 @@ class NotificationService:
         emails: List[str] = []
         if not et:
             return emails
-        for r in (self.admin_recipients or []):
-            email = r.get('email')
-            prefs = (r.get('prefs') or {})
+        for r in self.admin_recipients or []:
+            email = r.get("email")
+            prefs = r.get("prefs") or {}
             if email and prefs.get(et, True):
                 emails.append(email)
         return emails
-        
+
     def load_notification_history(self) -> Dict:
         """Load notification history to avoid duplicate notifications"""
         try:
             if os.path.exists(self.notifications_file):
-                with open(self.notifications_file, 'r') as f:
+                with open(self.notifications_file, "r") as f:
                     return json.load(f)
         except Exception as e:
             print(f"Error loading notification history: {e}")
         return {}
-    
+
     def save_notification_history(self):
         """Save notification history"""
         try:
             # Update tracking info before saving
-            self.notification_history['last_processed_csv'] = self.last_processed_csv
-            self.notification_history['last_notification_date'] = self.last_notification_date
-            
-            with open(self.notifications_file, 'w') as f:
+            self.notification_history["last_processed_csv"] = self.last_processed_csv
+            self.notification_history["last_notification_date"] = (
+                self.last_notification_date
+            )
+
+            with open(self.notifications_file, "w") as f:
                 json.dump(self.notification_history, f, indent=2)
         except Exception as e:
             print(f"Error saving notification history: {e}")
-    
+
     def should_check_for_notifications(self, current_csv_file: str) -> bool:
         """
         Determine if we should check for notifications based on CSV file and date
@@ -241,76 +254,92 @@ class NotificationService:
         2. Same CSV but different day (in case CSV is updated)
         """
         from datetime import datetime
-        
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        
+
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
         # Extract just the filename from the full path for comparison
-        current_csv_name = os.path.basename(current_csv_file) if current_csv_file else ''
-        last_csv_name = os.path.basename(self.last_processed_csv) if self.last_processed_csv else ''
-        
+        current_csv_name = (
+            os.path.basename(current_csv_file) if current_csv_file else ""
+        )
+        last_csv_name = (
+            os.path.basename(self.last_processed_csv) if self.last_processed_csv else ""
+        )
+
         # Check if this is a new CSV file or a new day
         if current_csv_name != last_csv_name:
-            print(f"📊 New CSV detected: {current_csv_name} (previous: {last_csv_name})")
+            print(
+                f"📊 New CSV detected: {current_csv_name} (previous: {last_csv_name})"
+            )
             return True
         elif current_date != self.last_notification_date:
-            print(f"📅 Same CSV but new day: {current_date} (last notification: {self.last_notification_date})")
+            print(
+                f"📅 Same CSV but new day: {current_date} (last notification: {self.last_notification_date})"
+            )
             return True
-        
-        print(f"⏭️ Skipping notification check - already processed {current_csv_name} today ({current_date})")
+
+        print(
+            f"⏭️ Skipping notification check - already processed {current_csv_name} today ({current_date})"
+        )
         return False
-    
+
     def update_csv_tracking(self, csv_file: str):
         """Update the tracking info for the last processed CSV"""
         from datetime import datetime
-        
+
         self.last_processed_csv = csv_file
-        self.last_notification_date = datetime.now().strftime('%Y-%m-%d')
+        self.last_notification_date = datetime.now().strftime("%Y-%m-%d")
         self.save_notification_history()
-        
-        print(f"📝 Updated CSV tracking: {os.path.basename(csv_file)} on {self.last_notification_date}")
-    
+
+        print(
+            f"📝 Updated CSV tracking: {os.path.basename(csv_file)} on {self.last_notification_date}"
+        )
+
     def has_been_notified(self, member_name: str, status: str) -> bool:
         """Check if we've already sent a notification for this member and status"""
         key = f"{member_name}_{status}_{self.last_notification_date}"
         return key in self.notification_history
-    
-    #def mark_as_notified(self, member_name: str, status: str):
-        #"""Mark that we've sent a notification for this member and status"""
-        #key = f"{member_name}_{status}"
-        #self.notification_history[key] = {
-           # "timestamp": datetime.now().isoformat(),
-           # "member": member_name,
-           # "status": status
-       # }
-       # self.save_notification_history()
-    
+
+    # def mark_as_notified(self, member_name: str, status: str):
+    # """Mark that we've sent a notification for this member and status"""
+    # key = f"{member_name}_{status}"
+    # self.notification_history[key] = {
+    # "timestamp": datetime.now().isoformat(),
+    # "member": member_name,
+    # "status": status
+    # }
+    # self.save_notification_history()
+
     def create_failure_email(self, member_data: Dict) -> tuple:
         """Create email content for probation failure notification"""
-        subject = f"🚨 PROBATION FAILURE ALERT: {member_data.get('name', 'Unknown Member')}"
-        
+        subject = (
+            f"🚨 PROBATION FAILURE ALERT: {member_data.get('name', 'Unknown Member')}"
+        )
+
         # Safely get member data with defaults
-        member_name = member_data.get('name', 'Unknown Member')
-        joined_date = member_data.get('joined_date', 'Unknown')
-        days_since_joined = member_data.get('days_since_joined', 'Unknown')
-        current_points = member_data.get('current_points', 0)
-        
+        member_name = member_data.get("name", "Unknown Member")
+        joined_date = member_data.get("joined_date", "Unknown")
+        days_since_joined = member_data.get("days_since_joined", "Unknown")
+        current_points = member_data.get("current_points", 0)
+
         # Ensure current_points is a number for formatting
         if current_points is None:
             current_points = 0
-        
+
         # Determine which milestone(s) failed
         failed_milestones = []
-        milestones = member_data.get('milestones', {})
-        
-        if milestones.get('week_1', {}).get('passed') == False:
+        milestones = member_data.get("milestones", {})
+
+        if milestones.get("week_1", {}).get("passed") == False:
             failed_milestones.append("First Week (250K points)")
-        if milestones.get('month_1', {}).get('passed') == False:
+        if milestones.get("month_1", {}).get("passed") == False:
             failed_milestones.append("First Month (1M points)")
-        if milestones.get('month_3', {}).get('passed') == False:
+        if milestones.get("month_3", {}).get("passed") == False:
             failed_milestones.append("Three Months (3M points)")
-        
-        failed_text = ", ".join(failed_milestones) if failed_milestones else "Unknown milestone"
-        
+
+        failed_text = (
+            ", ".join(failed_milestones) if failed_milestones else "Unknown milestone"
+        )
+
         # Create HTML email content
         html_content = f"""
         <html>
@@ -348,28 +377,28 @@ class NotificationService:
                         <p><strong>Joined Date:</strong> {joined_date}</p>
                         <p><strong>Days Since Joining:</strong> {days_since_joined}</p>
                         <p><strong>Current Points:</strong> {current_points:,}</p>
-                        <p><strong>Notification Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                        <p><strong>Notification Time:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
                     </div>
                     
                     <h3>Milestone Status</h3>
         """
-        
+
         # Add milestone details
         milestone_order = [
-            ('week_1', 'First Week', '250K points'),
-            ('month_1', 'First Month', '1M points'),
-            ('month_3', 'Three Months', '3M points')
+            ("week_1", "First Week", "250K points"),
+            ("month_1", "First Month", "1M points"),
+            ("month_3", "Three Months", "3M points"),
         ]
-        
+
         for key, title, target in milestone_order:
             milestone = milestones.get(key, {})
-            passed = milestone.get('passed')
-            points_at_deadline = milestone.get('points_at_deadline', current_points)
-            
+            passed = milestone.get("passed")
+            points_at_deadline = milestone.get("points_at_deadline", current_points)
+
             # Ensure points_at_deadline is a number
             if points_at_deadline is None:
                 points_at_deadline = current_points
-            
+
             if passed == True:
                 status_class = "passed"
                 status_text = "✅ PASSED"
@@ -379,25 +408,25 @@ class NotificationService:
             else:
                 status_class = "pending"
                 status_text = "⏳ IN PROGRESS"
-            
+
             html_content += f"""
                     <div class="milestone {status_class}">
                         <strong>{title}</strong> - {status_text}<br>
                         Target: {target} | Achieved: {points_at_deadline:,} points
                     </div>
             """
-        
+
         html_content += f"""
 
                 <div class="footer">
                     <p>This is an automated notification from the I.B.U Team Dashboard</p>
-                    <p>Generated on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}</p>
+                    <p>Generated on {datetime.now().strftime("%Y-%m-%d at %H:%M:%S")}</p>
                 </div>
             </div>
         </body>
         </html>
         """
-        
+
         # Create plain text version
         text_content = f"""
 PROBATION FAILURE ALERT - {member_name}
@@ -413,19 +442,25 @@ Member Details:
 
 Milestone Status:
 """
-        
+
         for key, title, target in milestone_order:
             milestone = milestones.get(key, {})
-            passed = milestone.get('passed')
-            points_at_deadline = milestone.get('points_at_deadline', current_points)
-            
+            passed = milestone.get("passed")
+            points_at_deadline = milestone.get("points_at_deadline", current_points)
+
             # Ensure points_at_deadline is a number
             if points_at_deadline is None:
                 points_at_deadline = current_points
-            
-            status_text = "PASSED" if passed == True else "FAILED" if passed == False else "IN PROGRESS"
+
+            status_text = (
+                "PASSED"
+                if passed == True
+                else "FAILED"
+                if passed == False
+                else "IN PROGRESS"
+            )
             text_content += f"- {title}: {status_text} (Target: {target}, Achieved: {points_at_deadline:,})\n"
-        
+
         text_content += f"""
 Required Actions:
 - Review member performance data
@@ -433,40 +468,41 @@ Required Actions:
 - Consider probation extension or termination
 - Update member status in team management system
 
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
-        
+
         return subject, html_content, text_content
 
     def create_passed_email(self, member_data: Dict) -> tuple:
-            
-            """Create email content for probation pass notification"""
-            subject = f"🎉 PROBATION PASSED: {member_data.get('name', 'Unknown Member')}"
-            
-            # Safely get member data with defaults
-            member_name = member_data.get('name', 'Unknown Member')
-            joined_date = member_data.get('joined_date', 'Unknown')
-            days_since_joined = member_data.get('days_since_joined', 'Unknown')
-            current_points = member_data.get('current_points', 0)
-            
-            # Ensure current_points is a number for formatting
-            if current_points is None:
-                current_points = 0
-            
-            # Determine which milestone(s) failed
-            failed_milestones = []
-            milestones = member_data.get('milestones', {})
-            
-            if milestones.get('week_1', {}).get('passed') == False:
-                failed_milestones.append("First Week (250K points)")
-            if milestones.get('month_1', {}).get('passed') == False:
-                failed_milestones.append("First Month (1M points)")
-            if milestones.get('month_3', {}).get('passed') == False:
-                failed_milestones.append("Three Months (3M points)")
-            
-            failed_text = ", ".join(failed_milestones) if failed_milestones else "Unknown milestone"
-            # Create HTML email content
-            html_content = f"""
+        """Create email content for probation pass notification"""
+        subject = f"🎉 PROBATION PASSED: {member_data.get('name', 'Unknown Member')}"
+
+        # Safely get member data with defaults
+        member_name = member_data.get("name", "Unknown Member")
+        joined_date = member_data.get("joined_date", "Unknown")
+        days_since_joined = member_data.get("days_since_joined", "Unknown")
+        current_points = member_data.get("current_points", 0)
+
+        # Ensure current_points is a number for formatting
+        if current_points is None:
+            current_points = 0
+
+        # Determine which milestone(s) failed
+        failed_milestones = []
+        milestones = member_data.get("milestones", {})
+
+        if milestones.get("week_1", {}).get("passed") == False:
+            failed_milestones.append("First Week (250K points)")
+        if milestones.get("month_1", {}).get("passed") == False:
+            failed_milestones.append("First Month (1M points)")
+        if milestones.get("month_3", {}).get("passed") == False:
+            failed_milestones.append("Three Months (3M points)")
+
+        failed_text = (
+            ", ".join(failed_milestones) if failed_milestones else "Unknown milestone"
+        )
+        # Create HTML email content
+        html_content = f"""
             <html>
             <head>
                 <style>
@@ -501,59 +537,59 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                             <p><strong>Joined Date:</strong> {joined_date}</p>
                             <p><strong>Days Since Joining:</strong> {days_since_joined}</p>
                             <p><strong>Current Points:</strong> {current_points:,}</p>
-                            <p><strong>Notification Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                            <p><strong>Notification Time:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
                         </div>
                         
                         <h3>Milestone Status</h3>
             """
-            
-            # Add milestone details
-            milestone_order = [
-                ('week_1', 'First Week', '250K points'),
-                ('month_1', 'First Month', '1M points'),
-                ('month_3', 'Three Months', '3M points')
-            ]
-            
-            for key, title, target in milestone_order:
-                milestone = milestones.get(key, {})
-                passed = milestone.get('passed')
-                points_at_deadline = milestone.get('points_at_deadline', current_points)
-                
-                # Ensure points_at_deadline is a number
-                if points_at_deadline is None:
-                    points_at_deadline = current_points
-                
-                if passed == True:
-                    status_class = "passed"
-                    status_text = "✅ PASSED"
-                elif passed == False:
-                    status_class = "failed"
-                    status_text = "❌ FAILED"
-                else:
-                    status_class = "pending"
-                    status_text = "⏳ IN PROGRESS"
-                
-                html_content += f"""
+
+        # Add milestone details
+        milestone_order = [
+            ("week_1", "First Week", "250K points"),
+            ("month_1", "First Month", "1M points"),
+            ("month_3", "Three Months", "3M points"),
+        ]
+
+        for key, title, target in milestone_order:
+            milestone = milestones.get(key, {})
+            passed = milestone.get("passed")
+            points_at_deadline = milestone.get("points_at_deadline", current_points)
+
+            # Ensure points_at_deadline is a number
+            if points_at_deadline is None:
+                points_at_deadline = current_points
+
+            if passed == True:
+                status_class = "passed"
+                status_text = "✅ PASSED"
+            elif passed == False:
+                status_class = "failed"
+                status_text = "❌ FAILED"
+            else:
+                status_class = "pending"
+                status_text = "⏳ IN PROGRESS"
+
+            html_content += f"""
                         <div class="milestone {status_class}">
                             <strong>{title}</strong> - {status_text}<br>
                             Target: {target} | Achieved: {points_at_deadline:,} points
                         </div>
                 """
-            
-            html_content += f"""
+
+        html_content += f"""
                         
                     </div>
                     
                     <div class="footer">
                         <p>This is an automated notification from the I.B.U Team Dashboard</p>
-                        <p>Generated on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}</p>
+                        <p>Generated on {datetime.now().strftime("%Y-%m-%d at %H:%M:%S")}</p>
                     </div>
                 </div>
             </body>
             </html>
             """
 
-            text_content = f"""
+        text_content = f"""
     PROBATION PASSED - {member_name}
 
     Member Details:
@@ -564,42 +600,40 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
     Congratulations! This member has successfully passed probation.
 
-    Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     """
-            return subject, html_content, text_content
+        return subject, html_content, text_content
 
     def create_non_compliant_email(self, member_data: Dict) -> tuple:
-
-
         """Create email content for post-probation non-compliance notification"""
         subject = f"⚠️ NON-COMPLIANT MEMBER: {member_data.get('name', 'Unknown Member')}"
-        
+
         # Safely get member data with defaults
-        member_name = member_data.get('name', 'Unknown Member')
-        joined_date = member_data.get('joined_date', 'Unknown')
-        current_points = member_data.get('current_points', 0)
-        
+        member_name = member_data.get("name", "Unknown Member")
+        joined_date = member_data.get("joined_date", "Unknown")
+        current_points = member_data.get("current_points", 0)
+
         # Ensure current_points is a number for formatting
         if current_points is None:
             current_points = 0
-        
+
         # Get most recent post-probation period performance
-        periods = member_data.get('post_probation_periods', [])
+        periods = member_data.get("post_probation_periods", [])
         if periods:
             # Use the last completed period (not the current one)
             if len(periods) > 1:
                 latest_period = periods[-2]
             else:
                 latest_period = periods[-1]
-            points_earned = latest_period.get('points_earned', 'N/A')
-            target_points = latest_period.get('target_points', 'N/A')
-            period_start = latest_period.get('start_date', '')
-            period_end = latest_period.get('end_date', '')
+            points_earned = latest_period.get("points_earned", "N/A")
+            target_points = latest_period.get("target_points", "N/A")
+            period_start = latest_period.get("start_date", "")
+            period_end = latest_period.get("end_date", "")
         else:
-            points_earned = 'N/A'
-            target_points = 'N/A'
-            period_start = ''
-            period_end = ''
+            points_earned = "N/A"
+            target_points = "N/A"
+            period_start = ""
+            period_end = ""
 
         recent_periods = periods[-3:] if periods else []
 
@@ -640,20 +674,20 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         <p><strong>Current Points:</strong> {current_points:,}</p>
                         <p><strong>Most Recent 90-Day Period:</strong> {period_start} to {period_end}</p>
                         <p><strong>Points Earned:</strong> {points_earned:,}</p>
-                        <p><strong>Notification Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                        <p><strong>Notification Time:</strong> {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
                     </div>
 
                     <h3>Post Probation Status</h3>
         """
-        
+
         # Add milestone details
         if recent_periods:
             for period in recent_periods:
-                start_date = period.get('start_date', '')
-                end_date = period.get('end_date', '')
-                points_earned = period.get('points_earned', 'N/A')
-                target_points = period.get('target_points', 'N/A')
-                status = period.get('status', 'Unknown')
+                start_date = period.get("start_date", "")
+                end_date = period.get("end_date", "")
+                points_earned = period.get("points_earned", "N/A")
+                target_points = period.get("target_points", "N/A")
+                status = period.get("status", "Unknown")
                 html_content += f"""
                 <div style="margin-bottom:10px;">
                     <strong>{start_date} to {end_date}</strong><br>
@@ -671,19 +705,19 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         </body>
         </html>
         """
-        
+
         html_content += f"""
                     
                 </div>
                 
                 <div class="footer">
                     <p>This is an automated notification from the I.B.U Team Dashboard</p>
-                    <p>Generated on {datetime.now().strftime('%Y-%m-%d at %H:%M:%S')}</p>
+                    <p>Generated on {datetime.now().strftime("%Y-%m-%d at %H:%M:%S")}</p>
                 </div>
             </div>
         </body>
         </html>
-        """    
+        """
 
         text_content = f"""
 NON-COMPLIANT MEMBER - {member_name}
@@ -694,18 +728,22 @@ Member Details:
 
 This member is non-compliant in the post-probation phase. Please review and take necessary action.
 
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 """
         return subject, html_content, text_content
 
-    def send_email(self, to_emails: List[str], subject: str, html_content: str, text_content: str) -> bool:
+    def send_email(
+        self, to_emails: List[str], subject: str, html_content: str, text_content: str
+    ) -> bool:
         """Send email notification"""
         if not self.sender_email or not self.sender_password:
             print("Email credentials not configured. Skipping email notification.")
             return False
         try:
             # Normalize recipients
-            recipients = [e for e in (to_emails or []) if isinstance(e, str) and e.strip()]
+            recipients = [
+                e for e in (to_emails or []) if isinstance(e, str) and e.strip()
+            ]
             if not recipients:
                 print("No recipients provided. Skipping email notification.")
                 return False
@@ -745,7 +783,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     wait = 1.0
                     try:
                         # If rate-limited, respect Retry-After seconds if present
-                        ra = resp.headers.get('Retry-After')
+                        ra = resp.headers.get("Retry-After")
                         if ra:
                             wait = float(ra)
                     except Exception:
@@ -757,40 +795,50 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     resp = client.post(self.discord_webhook_url, json=payload)
                 if 200 <= resp.status_code < 300:
                     return True
-                print(f"[Discord] webhook post failed: {resp.status_code} {resp.text[:200]}")
+                print(
+                    f"[Discord] webhook post failed: {resp.status_code} {resp.text[:200]}"
+                )
                 return False
         except Exception as e:
             print(f"[Discord] webhook error: {e}")
             return False
 
-    def _build_discord_embed(self, title: str, description: str, color: int, fields: Optional[List[Dict]] = None) -> Dict:
+    def _build_discord_embed(
+        self,
+        title: str,
+        description: str,
+        color: int,
+        fields: Optional[List[Dict]] = None,
+    ) -> Dict:
         embed: Dict[str, Any] = {
             "title": title,
             "description": description,
             "color": color,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
         if fields:
             embed["fields"] = fields
         return embed
 
-    def _send_discord_notification(self, event: str, member_data: Dict, subject: str, text_content: str) -> bool:
+    def _send_discord_notification(
+        self, event: str, member_data: Dict, subject: str, text_content: str
+    ) -> bool:
         """Send a concise Discord message for member event (failed/passed/non_compliant)."""
         if self.discord_enabled != "true" or not self.discord_webhook_url:
             return False
         try:
-            name = member_data.get('name', 'Unknown Member')
+            name = member_data.get("name", "Unknown Member")
             # Choose emoji/color per event
-            if event == 'failed':
-                emoji = '🚨'
+            if event == "failed":
+                emoji = "🚨"
                 color = 0xEF4444  # red-500
                 title = f"Probation Failure: {name}"
-            elif event == 'passed':
-                emoji = '🎉'
+            elif event == "passed":
+                emoji = "🎉"
                 color = 0x22C55E  # green-500
                 title = f"Probation Passed: {name}"
             else:
-                emoji = '⚠️'
+                emoji = "⚠️"
                 color = 0x8B5CF6  # violet-500
                 title = f"Non-Compliant: {name}"
 
@@ -809,30 +857,50 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             # Include a few key fields if available
             fields: List[Dict[str, Any]] = []
             # Member hyperlink to SheepIt profile
-            if name and name != 'Unknown Member':
+            if name and name != "Unknown Member":
                 try:
-                    display = str(name).replace('_', r'\_')
+                    display = str(name).replace("_", r"\_")
                 except Exception:
                     display = str(name)
                 profile_url = f"https://www.sheepit-renderfarm.com/user/{name}/profile"
-                fields.append({"name": "Member", "value": f"[{display}]({profile_url})", "inline": True})
-            joined = member_data.get('joined_date') or member_data.get('joined_date_parsed')
+                fields.append(
+                    {
+                        "name": "Member",
+                        "value": f"[{display}]({profile_url})",
+                        "inline": True,
+                    }
+                )
+            joined = member_data.get("joined_date") or member_data.get(
+                "joined_date_parsed"
+            )
             if joined:
                 fields.append({"name": "Joined", "value": str(joined), "inline": True})
-            cp = member_data.get('current_points')
+            cp = member_data.get("current_points")
             if cp is not None:
                 try:
-                    fields.append({"name": "Current Points", "value": f"{int(cp):,}", "inline": True})
+                    fields.append(
+                        {
+                            "name": "Current Points",
+                            "value": f"{int(cp):,}",
+                            "inline": True,
+                        }
+                    )
                 except Exception:
-                    fields.append({"name": "Current Points", "value": str(cp), "inline": True})
-            pp = member_data.get('post_probation_status')
+                    fields.append(
+                        {"name": "Current Points", "value": str(cp), "inline": True}
+                    )
+            pp = member_data.get("post_probation_status")
             if pp:
-                fields.append({"name": "Post-Probation", "value": str(pp), "inline": True})
+                fields.append(
+                    {"name": "Post-Probation", "value": str(pp), "inline": True}
+                )
 
-            embed = self._build_discord_embed(f"{emoji} {title}", description, color, fields)
+            embed = self._build_discord_embed(
+                f"{emoji} {title}", description, color, fields
+            )
             payload = {
                 "content": None,  # no extra content, embed only for neatness
-                "embeds": [embed]
+                "embeds": [embed],
             }
             # Apply optional profile overrides
             if self.discord_username:
@@ -840,93 +908,124 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
             if self.discord_avatar_url:
                 payload["avatar_url"] = self.discord_avatar_url
             # Send asynchronously so we don't block email flow
-            threading.Thread(target=self._discord_post, args=(payload,), daemon=True).start()
+            threading.Thread(
+                target=self._discord_post, args=(payload,), daemon=True
+            ).start()
             return True
         except Exception as e:
             print(f"[Discord] build/send error: {e}")
             return False
-    
+
     def notify_probation_failure(self, member_data: Dict) -> bool:
         """Send probation failure notification"""
-        member_name = member_data.get('name', 'Unknown')
+        member_name = member_data.get("name", "Unknown")
         # Check if we've already sent this notification
         if self.has_been_notified(member_name, "failed"):
-            print(f"Already notified about {member_name} probation failure. Skipping duplicate.")
+            print(
+                f"Already notified about {member_name} probation failure. Skipping duplicate."
+            )
             return True
         # Create email content
         subject, html_content, text_content = self.create_failure_email(member_data)
         # Send email
-        recipients = self.get_recipients_for('failed')
+        recipients = self.get_recipients_for("failed")
         success = self.send_email(recipients, subject, html_content, text_content)
         # Mirror to Discord (best-effort, independent of email success)
-        self._send_discord_notification('failed', member_data, subject, text_content)
+        self._send_discord_notification("failed", member_data, subject, text_content)
         # if success:
         #     self.mark_as_notified(member_name, "failed")
         return success
 
     def notify_probation_passed(self, member_data: Dict) -> bool:
         """Send probation passed notification"""
-        member_name = member_data.get('name', 'Unknown')
+        member_name = member_data.get("name", "Unknown")
         if self.has_been_notified(member_name, "passed"):
-            print(f"Already notified about {member_name} probation passed. Skipping duplicate.")
+            print(
+                f"Already notified about {member_name} probation passed. Skipping duplicate."
+            )
             return True
         subject, html_content, text_content = self.create_passed_email(member_data)
-        recipients = self.get_recipients_for('passed')
+        recipients = self.get_recipients_for("passed")
         success = self.send_email(recipients, subject, html_content, text_content)
-        self._send_discord_notification('passed', member_data, subject, text_content)
+        self._send_discord_notification("passed", member_data, subject, text_content)
         # if success:
         #     self.mark_as_notified(member_name, "passed")
         return success
 
     def notify_non_compliant(self, member_data: Dict) -> bool:
         """Send non-compliant notification"""
-        member_name = member_data.get('name', 'Unknown')
+        member_name = member_data.get("name", "Unknown")
         if self.has_been_notified(member_name, "non_compliant"):
-            print(f"Already notified about {member_name} non-compliance. Skipping duplicate.")
+            print(
+                f"Already notified about {member_name} non-compliance. Skipping duplicate."
+            )
             return True
-        subject, html_content, text_content = self.create_non_compliant_email(member_data)
-        recipients = self.get_recipients_for('non_compliant')
+        subject, html_content, text_content = self.create_non_compliant_email(
+            member_data
+        )
+        recipients = self.get_recipients_for("non_compliant")
         success = self.send_email(recipients, subject, html_content, text_content)
-        self._send_discord_notification('non_compliant', member_data, subject, text_content)
+        self._send_discord_notification(
+            "non_compliant", member_data, subject, text_content
+        )
         # if success:
         #     self.mark_as_notified(member_name, "non_compliant")
         return success
 
-    def check_and_notify_failures(self, members_data: List[Dict], current_csv_file: str = None):
+    def check_and_notify_failures(
+        self, members_data: List[Dict], current_csv_file: str = None
+    ):
         """
         Check all members for failures and send notifications
         Only sends notifications if this is a new CSV file or a new day
         """
         # If no CSV file provided, skip the smart checking
-        if current_csv_file and not self.should_check_for_notifications(current_csv_file):
+        if current_csv_file and not self.should_check_for_notifications(
+            current_csv_file
+        ):
             return
-        
-        failed_members = [m for m in members_data if m.get('probation_status') == 'failed']
-        non_compliant_members = [m for m in members_data if m.get('post_probation_status') == 'non_compliant']
+
+        failed_members = [
+            m for m in members_data if m.get("probation_status") == "failed"
+        ]
+        non_compliant_members = [
+            m for m in members_data if m.get("post_probation_status") == "non_compliant"
+        ]
         # Only send 'passed' notification if member is not non-compliant
-        passed_members = [m for m in members_data if m.get('probation_status') == 'passed' and m.get('post_probation_status') != 'non_compliant']
-        
+        passed_members = [
+            m
+            for m in members_data
+            if m.get("probation_status") == "passed"
+            and m.get("post_probation_status") != "non_compliant"
+        ]
+
         # Add debug logging for all member types
-        print(f"🔍 Processing: {len(failed_members)} failed, {len(passed_members)} passed, {len(non_compliant_members)} non-compliant")
-        print(f"🔍 Passed members: {[m.get('name', 'Unknown') for m in passed_members]}")
-        
+        print(
+            f"🔍 Processing: {len(failed_members)} failed, {len(passed_members)} passed, {len(non_compliant_members)} non-compliant"
+        )
+        print(
+            f"🔍 Passed members: {[m.get('name', 'Unknown') for m in passed_members]}"
+        )
+
         if not failed_members and not passed_members and not non_compliant_members:
             print("✅ No members requiring notifications found in current data")
             if current_csv_file:
                 self.update_csv_tracking(current_csv_file)
             return
-        
+
         # Process all member types
         print(f"📬 Processing notifications for all member types...")
-        
+
         notifications_sent = 0
-        
+
         # Process failed members
         if failed_members:
-            print(f"🚨 Found {len(failed_members)} failed members. Sending notifications...")
+            print(
+                f"🚨 Found {len(failed_members)} failed members. Sending notifications..."
+            )
         for member in failed_members:
             try:
-                member_name = member.get('name', 'Unknown')
+                member_name = member.get("name", "Unknown")
                 notif_key = f"{member_name}"
                 prev_entry = self.notification_history.get(notif_key)
                 prev_status = prev_entry["status"] if prev_entry else None
@@ -938,24 +1037,30 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         notifications_sent += 1
                         print(f"🔔 Sent failed notification for {member_name}")
                 else:
-                    print(f"⏭️ No status change for {member_name} (failed), not sending email.")
+                    print(
+                        f"⏭️ No status change for {member_name} (failed), not sending email."
+                    )
 
                 # Always update notification history to latest date/status
                 self.notification_history[notif_key] = {
                     "timestamp": datetime.now().isoformat(),
                     "member": member_name,
                     "status": "failed",
-                    "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
+                    "csv_file": os.path.basename(current_csv_file)
+                    if current_csv_file
+                    else "unknown",
                 }
             except Exception as e:
                 print(f"❌ Error notifying about {member.get('name', 'Unknown')}: {e}")
 
-        # Process passed members  
+        # Process passed members
         if passed_members:
-            print(f"🎉 Found {len(passed_members)} passed members. Sending notifications...")
+            print(
+                f"🎉 Found {len(passed_members)} passed members. Sending notifications..."
+            )
         for member in passed_members:
             try:
-                member_name = member.get('name', 'Unknown')
+                member_name = member.get("name", "Unknown")
                 notif_key = f"{member_name}"
                 prev_entry = self.notification_history.get(notif_key)
                 prev_status = prev_entry["status"] if prev_entry else None
@@ -966,23 +1071,29 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         notifications_sent += 1
                         print(f"🔔 Sent passed notification for {member_name}")
                 else:
-                    print(f"⏭️ No status change for {member_name} (passed), not sending email.")
+                    print(
+                        f"⏭️ No status change for {member_name} (passed), not sending email."
+                    )
 
                 self.notification_history[notif_key] = {
                     "timestamp": datetime.now().isoformat(),
                     "member": member_name,
                     "status": "passed",
-                    "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
+                    "csv_file": os.path.basename(current_csv_file)
+                    if current_csv_file
+                    else "unknown",
                 }
             except Exception as e:
                 print(f"❌ Error notifying about {member.get('name', 'Unknown')}: {e}")
 
         # Process non-compliant members
         if non_compliant_members:
-            print(f"⚠️ Found {len(non_compliant_members)} non-compliant members. Sending notifications...")
+            print(
+                f"⚠️ Found {len(non_compliant_members)} non-compliant members. Sending notifications..."
+            )
         for member in non_compliant_members:
             try:
-                member_name = member.get('name', 'Unknown')
+                member_name = member.get("name", "Unknown")
                 notif_key = f"{member_name}"
                 prev_entry = self.notification_history.get(notif_key)
                 prev_status = prev_entry["status"] if prev_entry else None
@@ -993,13 +1104,17 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                         notifications_sent += 1
                         print(f"🔔 Sent non-compliant notification for {member_name}")
                 else:
-                    print(f"⏭️ No status change for {member_name} (non_compliant), not sending email.")
+                    print(
+                        f"⏭️ No status change for {member_name} (non_compliant), not sending email."
+                    )
 
                 self.notification_history[notif_key] = {
                     "timestamp": datetime.now().isoformat(),
                     "member": member_name,
                     "status": "non_compliant",
-                    "csv_file": os.path.basename(current_csv_file) if current_csv_file else "unknown"
+                    "csv_file": os.path.basename(current_csv_file)
+                    if current_csv_file
+                    else "unknown",
                 }
             except Exception as e:
                 print(f"❌ Error notifying about {member.get('name', 'Unknown')}: {e}")
@@ -1007,11 +1122,14 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         if notifications_sent > 0:
             print(f"✅ Sent {notifications_sent} total notifications")
         else:
-            print("✅ No new notifications needed - all members already notified for current status")
+            print(
+                "✅ No new notifications needed - all members already notified for current status"
+            )
 
         # Update CSV tracking after processing
         if current_csv_file:
             self.update_csv_tracking(current_csv_file)
+
 
 # Global notification service instance
 notification_service = NotificationService()

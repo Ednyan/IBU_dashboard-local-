@@ -1,4 +1,14 @@
-from flask import Flask, request, render_template, jsonify, Response, session, redirect, url_for, send_file
+from flask import (
+    Flask,
+    request,
+    render_template,
+    jsonify,
+    Response,
+    session,
+    redirect,
+    url_for,
+    send_file,
+)
 from datetime import datetime, timedelta
 import pandas as pd
 import os
@@ -26,6 +36,7 @@ load_dotenv()
 # Import notification service
 try:
     from notification_service import notification_service
+
     NOTIFICATIONS_ENABLED = True
     print("✅ Email notifications enabled")
 except ImportError as e:
@@ -43,9 +54,12 @@ layout_width = 1000  # aspect_ratio variable removed (unused)
 
 # --- Probation Overrides (external file) ------------------------------------
 # Configure overrides file (JSON). Can be changed via env PROBATION_OVERRIDES_FILE
-OVERRIDES_FILE = os.getenv('PROBATION_OVERRIDES_FILE', os.path.join('config', 'probation_overrides.json'))
+OVERRIDES_FILE = os.getenv(
+    "PROBATION_OVERRIDES_FILE", os.path.join("config", "probation_overrides.json")
+)
 
 MEMBER_INFO_CACHE_FILE = "./cache/member_info.json"
+
 
 def load_probation_overrides() -> dict:
     """Load milestone pass overrides from JSON file. Returns {} if missing/invalid.
@@ -53,7 +67,7 @@ def load_probation_overrides() -> dict:
     """
     try:
         if os.path.exists(OVERRIDES_FILE):
-            with open(OVERRIDES_FILE, 'r', encoding='utf-8') as f:
+            with open(OVERRIDES_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
                     return data
@@ -61,6 +75,7 @@ def load_probation_overrides() -> dict:
     except Exception as e:
         print(f"Error loading probation overrides from {OVERRIDES_FILE}: {e}")
         return {}
+
 
 def save_probation_overrides(data: dict) -> bool:
     """Persist the overrides dict atomically. Returns True on success."""
@@ -71,7 +86,7 @@ def save_probation_overrides(data: dict) -> bool:
             os.makedirs(overrides_dir, exist_ok=True)
 
         tmp_path = OVERRIDES_FILE + ".tmp"
-        with open(tmp_path, 'w', encoding='utf-8') as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data or {}, f, indent=2, ensure_ascii=False)
         os.replace(tmp_path, OVERRIDES_FILE)
         return True
@@ -84,16 +99,18 @@ def save_probation_overrides(data: dict) -> bool:
             pass
         return False
 
+
 def name_to_color(name):
     # Hash the name to get a consistent value
     hash_object = hashlib.md5(name.encode())
     hex_color = "#" + hash_object.hexdigest()[:6]
     return hex_color
 
+
 def _hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip('#')
+    hex_color = hex_color.lstrip("#")
     if len(hex_color) == 3:
-        hex_color = ''.join(c*2 for c in hex_color)
+        hex_color = "".join(c * 2 for c in hex_color)
     try:
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
@@ -102,16 +119,18 @@ def _hex_to_rgb(hex_color):
     except Exception:
         return 128, 128, 128
 
+
 def blend_with(color_hex, base_rgb, alpha=0.5):
     """Blend a member color (hex) with a base RGB tuple (e.g. green or red) by alpha.
     alpha: portion of base color; (1-alpha) of member color.
     Returns hex string."""
     mr, mg, mb = _hex_to_rgb(color_hex)
     br, bg, bb = base_rgb
-    r = int(mr*(1-alpha) + br*alpha)
-    g = int(mg*(1-alpha) + bg*alpha)
-    b = int(mb*(1-alpha) + bb*alpha)
+    r = int(mr * (1 - alpha) + br * alpha)
+    g = int(mg * (1 - alpha) + bg * alpha)
+    b = int(mb * (1 - alpha) + bb * alpha)
     return f"#{r:02x}{g:02x}{b:02x}"
+
 
 # --- Normalization Helpers -------------------------------------------------
 def normalize_member_points_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -128,13 +147,13 @@ def normalize_member_points_columns(df: pd.DataFrame) -> pd.DataFrame:
         lower_map = {c.lower(): c for c in df.columns}
         rename_map = {}
         # Member/name
-        if 'member' in lower_map:
-            rename_map[lower_map['member']] = 'Member'
-        elif 'name' in lower_map:
-            rename_map[lower_map['name']] = 'Member'
+        if "member" in lower_map:
+            rename_map[lower_map["member"]] = "Member"
+        elif "name" in lower_map:
+            rename_map[lower_map["name"]] = "Member"
         # Points
-        if 'points' in lower_map:
-            rename_map[lower_map['points']] = 'Points'
+        if "points" in lower_map:
+            rename_map[lower_map["points"]] = "Points"
         if rename_map:
             df = df.rename(columns=rename_map)
         return df
@@ -156,6 +175,7 @@ def get_team_points_files_from_folder():
         print(f"Error getting team rankings files: {e}")
         return []
 
+
 # --- Team name normalization / sanitization helpers (for robust matching) ----
 def _sanitize_team_name(name: str) -> str:
     """Return a simplified version of a team name for fuzzy-ish matching.
@@ -167,17 +187,19 @@ def _sanitize_team_name(name: str) -> str:
     """
     try:
         if name is None:
-            return ''
+            return ""
         # Normalize unicode form
         import unicodedata, re as _re
-        n = unicodedata.normalize('NFKC', str(name)).lower()
+
+        n = unicodedata.normalize("NFKC", str(name)).lower()
         # Replace non-alphanumeric with space
-        n = _re.sub(r'[^a-z0-9]+', ' ', n)
+        n = _re.sub(r"[^a-z0-9]+", " ", n)
         # Collapse spaces
-        n = ' '.join(n.split())
+        n = " ".join(n.split())
         return n
     except Exception:
         return str(name).strip().lower()
+
 
 def get_latest_csv_file():
     """
@@ -185,27 +207,32 @@ def get_latest_csv_file():
     """
     try:
         csv_files = get_csv_files_from_folder()
-        
+
         if not csv_files:
             return None, None, None
-        
+
         latest_file = csv_files[0]
-        
+
         # Extract date from filename
         filename = os.path.basename(latest_file)
-        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
-        
+        date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
+
         if date_match:
             date_str = date_match.group(1)
             # Get file modification time as timestamp
             file_timestamp = datetime.fromtimestamp(os.path.getmtime(latest_file))
             return latest_file, date_str, file_timestamp
         else:
-            return latest_file, "unknown", datetime.fromtimestamp(os.path.getmtime(latest_file))
-            
+            return (
+                latest_file,
+                "unknown",
+                datetime.fromtimestamp(os.path.getmtime(latest_file)),
+            )
+
     except Exception as e:
         print(f"Error getting latest file from local folder: {str(e)}")
         return None, None, None
+
 
 def find_csv_file_by_date(date_str):
     """
@@ -214,69 +241,71 @@ def find_csv_file_by_date(date_str):
     try:
         target_filename = f"sheepit_team_points_{date_str}.csv"
         target_path = os.path.join(DATA_FOLDER, target_filename)
-        
+
         if os.path.exists(target_path):
             return target_path
-        
+
         # If exact match not found, look for any file containing the date
         csv_files = get_csv_files_from_folder()
         for file in csv_files:
             if date_str in os.path.basename(file):
                 return file
-        
+
         return None
-        
+
     except Exception as e:
         print(f"Error finding CSV file by date {date_str}: {str(e)}")
         return None
+
 
 def get_time_ago_string(file_timestamp):
     """Convert timestamp to 'X time ago' format"""
     if not file_timestamp:
         return "Recently"
-    
+
     try:
         current_time = datetime.now()
         time_diff = current_time - file_timestamp
-        
+
         total_seconds = int(time_diff.total_seconds())
-        
+
         # Calculate time units
         if total_seconds < 60:
             return "Just now" if total_seconds < 10 else f"{total_seconds} seconds ago"
-        
+
         minutes = total_seconds // 60
         if minutes < 60:
             return "1 minute ago" if minutes == 1 else f"{minutes} minutes ago"
-        
+
         hours = minutes // 60
         if hours < 24:
             return "1 hour ago" if hours == 1 else f"{hours} hours ago"
-        
+
         days = hours // 24
         if days < 30:
             return "1 day ago" if days == 1 else f"{days} days ago"
-        
+
         months = days // 30
         if months < 12:
             return "1 month ago" if months == 1 else f"{months} months ago"
-        
+
         years = months // 12
         return "1 year ago" if years == 1 else f"{years} years ago"
-        
+
     except Exception as e:
         print(f"Error calculating time ago: {e}")
         return "Recently"
+
 
 def get_last_day_data():
     """Get chart data showing point differences for the last day (latest file vs previous day file)"""
     try:
         # Get the latest CSV file
         latest_file_path, latest_date_str, _ = get_latest_csv_file()
-        
+
         if not latest_file_path or not latest_date_str:
             return {"error": "No CSV files found for last day calculation."}
-        
+
         # Calculate the previous day
         try:
             latest_date = datetime.strptime(latest_date_str, "%Y-%m-%d").date()
@@ -284,56 +313,62 @@ def get_last_day_data():
             previous_date_str = previous_date.strftime("%Y-%m-%d")
         except ValueError:
             return {"error": f"Invalid date format in latest file: {latest_date_str}"}
-        
+
         # Find the CSV file for the previous day
         previous_file_path = find_csv_file_by_date(previous_date_str)
-        
+
         if not previous_file_path:
-            return {"error": f"Previous day file not found for {previous_date_str}. Cannot calculate last day difference without consecutive day data."}
-        
-        if not os.path.exists(latest_file_path) or not os.path.exists(previous_file_path):
+            return {
+                "error": f"Previous day file not found for {previous_date_str}. Cannot calculate last day difference without consecutive day data."
+            }
+
+        if not os.path.exists(latest_file_path) or not os.path.exists(
+            previous_file_path
+        ):
             return {"error": "Required CSV files not found for last day calculation."}
-        
+
         # Use the existing standardize_range_formats function to calculate differences
         return standardize_range_formats(previous_file_path, latest_file_path)
-        
+
     except Exception as e:
         return {"error": f"Error calculating last day data: {str(e)}"}
+
 
 def get_chart_total():
     """Get chart data from the latest CSV file in the local folder"""
     try:
         # Get the latest file from local folder
         file_path, date_str, file_timestamp = get_latest_csv_file()
-        
+
         if not file_path or not os.path.exists(file_path):
             return {"error": "No CSV files found in the Scraped_Team_Info folder."}
-        
+
         # Load CSV
         df = pd.read_csv(file_path)
-        
+
         # Check if file is empty
         if df.empty:
             return {"error": "Data file is empty."}
-        
+
         df.columns = df.columns.str.strip()
         df = df.rename(columns={"name": "Member", "points": "Points"})
-        
+
         # Check if required columns exist
         if "Member" not in df.columns or "Points" not in df.columns:
             return {"error": "Data file missing required columns (Member, Points)."}
-        
+
         # Check if there's any data
         if len(df) == 0:
             return {"error": "No data available in file."}
-        
+
         member = df["Member"]
         points = df["Points"]
         color = df["Member"].apply(name_to_color)
         return data_for_return(member, points, color)
-        
+
     except Exception as e:
         return {"error": f"Error processing data file: {str(e)}"}
+
 
 def get_last_week_range():
     """Get chart data for last week using local CSV files"""
@@ -343,18 +378,23 @@ def get_last_week_range():
     print(last_monday, this_monday)
     end_date = this_monday.strftime("%Y-%m-%d")
     start_date = last_monday.strftime("%Y-%m-%d")
-    
+
     # Find the required CSV files in local folder
     file_start = find_csv_file_by_date(start_date)
     file_end = find_csv_file_by_date(end_date)
-    
+
     if not file_start:
-        return {"error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     if not file_end:
-        return {"error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     return standardize_range_formats(file_start, file_end)
+
 
 def get_last_month_range():
     """Get chart data for last month using local CSV files"""
@@ -364,18 +404,23 @@ def get_last_month_range():
     last_month_start = last_month_end.replace(day=1)
     end_date = last_month_end.strftime("%Y-%m-%d")
     start_date = last_month_start.strftime("%Y-%m-%d")
-    
+
     # Find the required CSV files in local folder
     file_start = find_csv_file_by_date(start_date)
     file_end = find_csv_file_by_date(end_date)
-    
+
     if not file_start:
-        return {"error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     if not file_end:
-        return {"error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     return standardize_range_formats(file_start, file_end)
+
 
 def get_last_year_range():
     """Get chart data for last year using local CSV files"""
@@ -385,18 +430,23 @@ def get_last_year_range():
     last_year_end = datetime(last_year, 12, 31).date()
     end_date = last_year_end.strftime("%Y-%m-%d")
     start_date = last_year_start.strftime("%Y-%m-%d")
-    
+
     # Find the required CSV files in local folder
     file_start = find_csv_file_by_date(start_date)
     file_end = find_csv_file_by_date(end_date)
-    
+
     if not file_start:
-        return {"error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"Start date file not found for {start_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     if not file_end:
-        return {"error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"End date file not found for {end_date}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     return standardize_range_formats(file_start, file_end)
+
 
 def get_last_90_days_range():
     """Get chart data for exactly the last 90 days using local CSV files.
@@ -415,15 +465,20 @@ def get_last_90_days_range():
         file_start = find_csv_file_by_date(start_date_str)
         file_end = find_csv_file_by_date(latest_date_str)
         if not file_start:
-            return {"error": f"Start date file not found for {start_date_str}. Cannot calculate last 90 days without an exact file on the start date."}
+            return {
+                "error": f"Start date file not found for {start_date_str}. Cannot calculate last 90 days without an exact file on the start date."
+            }
         if not file_end:
-            return {"error": f"End date file not found for {latest_date_str}. Cannot calculate last 90 days without an exact file on the end date."}
+            return {
+                "error": f"End date file not found for {latest_date_str}. Cannot calculate last 90 days without an exact file on the end date."
+            }
         data = standardize_range_formats(file_start, file_end)
         if isinstance(data, dict):
             data["date_range"] = {"start": start_date_str, "end": latest_date_str}
         return data
     except Exception as e:
         return {"error": f"Error calculating last 90 days data: {str(e)}"}
+
 
 def get_last_180_days_range():
     """Get chart data for exactly the last 180 days using local CSV files.
@@ -442,9 +497,13 @@ def get_last_180_days_range():
         file_start = find_csv_file_by_date(start_date_str)
         file_end = find_csv_file_by_date(latest_date_str)
         if not file_start:
-            return {"error": f"Start date file not found for {start_date_str}. Cannot calculate last 180 days without an exact file on the start date."}
+            return {
+                "error": f"Start date file not found for {start_date_str}. Cannot calculate last 180 days without an exact file on the start date."
+            }
         if not file_end:
-            return {"error": f"End date file not found for {latest_date_str}. Cannot calculate last 180 days without an exact file on the end date."}
+            return {
+                "error": f"End date file not found for {latest_date_str}. Cannot calculate last 180 days without an exact file on the end date."
+            }
         data = standardize_range_formats(file_start, file_end)
         if isinstance(data, dict):
             data["date_range"] = {"start": start_date_str, "end": latest_date_str}
@@ -452,22 +511,28 @@ def get_last_180_days_range():
     except Exception as e:
         return {"error": f"Error calculating last 180 days data: {str(e)}"}
 
+
 def get_chart_data_for_range(start_date, end_date):
     """Get chart data for a custom date range using local CSV files"""
     # Find the required CSV files in local folder
     start_date_str = start_date.strftime("%Y-%m-%d")
     end_date_str = end_date.strftime("%Y-%m-%d")
-    
+
     file_start = find_csv_file_by_date(start_date_str)
     file_end = find_csv_file_by_date(end_date_str)
-    
+
     if not file_start:
-        return {"error": f"Start date file not found for {start_date_str}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
-    
+        return {
+            "error": f"Start date file not found for {start_date_str}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
+
     if not file_end:
-        return {"error": f"End date file not found for {end_date_str}. Please ensure the CSV file exists in the Scraped_Team_Info folder."}
+        return {
+            "error": f"End date file not found for {end_date_str}. Please ensure the CSV file exists in the Scraped_Team_Info folder."
+        }
 
     return standardize_range_formats(file_start, file_end)
+
 
 def standardize_range_formats(file_start_raw, file_end_raw):
     # Load CSVs
@@ -482,22 +547,20 @@ def standardize_range_formats(file_start_raw, file_end_raw):
     df_start = df_start.rename(columns={"name": "Member", "points": "Points"})
     df_end = df_end.rename(columns={"name": "Member", "points": "Points"})
 
-    
     # Find new members in end that are not in start
     new_members = set(df_end["Member"]) - set(df_start["Member"])
     if new_members:
         # Create DataFrame for new members with 0 points at start
-        new_rows = pd.DataFrame({
-            "Member": list(new_members),
-            "Points": [0] * len(new_members)
-        })
+        new_rows = pd.DataFrame(
+            {"Member": list(new_members), "Points": [0] * len(new_members)}
+        )
         # Append to df_start
         df_start = pd.concat([df_start, new_rows], ignore_index=True)
 
     # Merge and calculate difference
     merged = pd.merge(df_end, df_start, on="Member", suffixes=("_end", "_start"))
     merged["Delta"] = merged["Points_end"] - merged["Points_start"]
-    #merged = merged[merged["Delta"] > 0] # Uncomment to filter out non-positive/0 points members
+    # merged = merged[merged["Delta"] > 0] # Uncomment to filter out non-positive/0 points members
     color = merged["Member"].apply(name_to_color)
     member = merged["Member"]
     points = merged["Delta"]
@@ -505,106 +568,101 @@ def standardize_range_formats(file_start_raw, file_end_raw):
     # Return data in pie chart format
     return data_for_return(member, points, color)
 
+
 def data_for_return(data_member, data_points, color_data):
     return {
         "data": [
-        {
-            "type": "pie",
-            "labels": data_member.tolist(),
-            "values": data_points.tolist(),
-            "hole": 0.6,
-            "text": get_custom_text(data_points, data_member),
-            "textinfo": "text",
-            "textposition": "inside",
-            "hoverinfo": "label+percent+value",
-            "hovertemplate": "<b>%{label}</b><br>" +
-                           "Points: %{value:,}<br>" +
-                           "Percentage: %{percent}<br>" +
-                           "<extra></extra>",
-            "marker": {
-                "colors": color_data.tolist(),
-                "line": {
-                    "color": "rgba(255, 255, 255, 0.2)",
-                    "width": 1
-                }
-            },
-            "automargin": False,
-            "domain": {"x": [0, 1], "y": [0, 1]},
-        }
-    ],
-    "layout": {
-        "width": layout_width,
-        "height": layout_height, 
-        "margin": {"t": 50, "b": 50, "l": 0, "r": 0},
-        "showlegend": True,
-        "paper_bgcolor": "rgba(0,0,0,0)",
-        "plot_bgcolor": "rgba(0,0,0,0)",
-        "annotations": [
             {
-                "text": f"<b>Total Points</b><br><br><span style='font-size:24px; color:#e06150'>{sum(data_points):,}</span>",
-                "x": 0.5,
-                "y": 0.55,
-                "xref": "paper",
-                "yref": "paper",
-                "showarrow": False,
-                "font": {
-                    "size": 14,
-                    "color": "white",
-                    "family": "Inter, Arial, sans-serif"
+                "type": "pie",
+                "labels": data_member.tolist(),
+                "values": data_points.tolist(),
+                "hole": 0.6,
+                "text": get_custom_text(data_points, data_member),
+                "textinfo": "text",
+                "textposition": "inside",
+                "hoverinfo": "label+percent+value",
+                "hovertemplate": "<b>%{label}</b><br>"
+                + "Points: %{value:,}<br>"
+                + "Percentage: %{percent}<br>"
+                + "<extra></extra>",
+                "marker": {
+                    "colors": color_data.tolist(),
+                    "line": {"color": "rgba(255, 255, 255, 0.2)", "width": 1},
                 },
-                "align": "center"
-            },
-            {
-                "text": f"Active Members: {len([x for x in data_points if x > 0])}",
-                "x": 0.5,
-                "y": 0.4,
-                "xref": "paper",
-                "yref": "paper",
-                "showarrow": False,
-                "font": {
-                    "size": 12,
-                    "color": "rgba(255, 255, 255, 0.7)",
-                    "family": "Inter, Arial, sans-serif"
-                },
-                "align": "center"
+                "automargin": False,
+                "domain": {"x": [0, 1], "y": [0, 1]},
             }
         ],
-        "font": {
-            "color": "white",
-            "family": "Inter, Arial, sans-serif",
-            "size": 14
-        },
-        "legend": {
-            "title": {
-                "text": "<b style='color:#e06150; font-size:16px'>👥 Team Members</b>",
-                "font": {
-                    "color": "#e06150",
-                    "size": 16,
-                    "family": "Inter, Arial, sans-serif"
-                }
-            },
-            "orientation": "v",
-            "xanchor": "left",
-            "x": 1,
-            "y": 0,
-            "bgcolor": "rgba(42, 42, 42, 0.8)",
-            "bordercolor": "rgba(224, 97, 80, 0.3)",
-            "borderwidth": 1,
+        "layout": {
+            "width": layout_width,
+            "height": layout_height,
+            "margin": {"t": 50, "b": 50, "l": 0, "r": 0},
+            "showlegend": True,
+            "paper_bgcolor": "rgba(0,0,0,0)",
+            "plot_bgcolor": "rgba(0,0,0,0)",
+            "annotations": [
+                {
+                    "text": f"<b>Total Points</b><br><br><span style='font-size:24px; color:#e06150'>{sum(data_points):,}</span>",
+                    "x": 0.5,
+                    "y": 0.55,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "showarrow": False,
+                    "font": {
+                        "size": 14,
+                        "color": "white",
+                        "family": "Inter, Arial, sans-serif",
+                    },
+                    "align": "center",
+                },
+                {
+                    "text": f"Active Members: {len([x for x in data_points if x > 0])}",
+                    "x": 0.5,
+                    "y": 0.4,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "showarrow": False,
+                    "font": {
+                        "size": 12,
+                        "color": "rgba(255, 255, 255, 0.7)",
+                        "family": "Inter, Arial, sans-serif",
+                    },
+                    "align": "center",
+                },
+            ],
             "font": {
                 "color": "white",
-                "size": 12,
-                "family": "Inter, Arial, sans-serif"
+                "family": "Inter, Arial, sans-serif",
+                "size": 14,
             },
-            "itemsizing": "constant",
-            "itemwidth": 50
-        }
-    },
-    "config": {
-        "displaylogo": False,
-        "displayModeBar": False,
-        "showTips": False
+            "legend": {
+                "title": {
+                    "text": "<b style='color:#e06150; font-size:16px'>👥 Team Members</b>",
+                    "font": {
+                        "color": "#e06150",
+                        "size": 16,
+                        "family": "Inter, Arial, sans-serif",
+                    },
+                },
+                "orientation": "v",
+                "xanchor": "left",
+                "x": 1,
+                "y": 0,
+                "bgcolor": "rgba(42, 42, 42, 0.8)",
+                "bordercolor": "rgba(224, 97, 80, 0.3)",
+                "borderwidth": 1,
+                "font": {
+                    "color": "white",
+                    "size": 12,
+                    "family": "Inter, Arial, sans-serif",
+                },
+                "itemsizing": "constant",
+                "itemwidth": 50,
+            },
+        },
+        "config": {"displaylogo": False, "displayModeBar": False, "showTips": False},
     }
-}
+
 
 def get_custom_text(values, labels):
     total = sum(values)
@@ -620,41 +678,65 @@ def get_custom_text(values, labels):
                 result.append("")
     return result
 
-app = Flask(__name__) #. .venv/bin/activate
+
+app = Flask(__name__)  # . .venv/bin/activate
 
 # Configure Flask session
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'ibu-dashboard-secret-key-change-in-production')
+app.secret_key = os.getenv(
+    "FLASK_SECRET_KEY", "ibu-dashboard-secret-key-change-in-production"
+)
 
 # Admin password configuration
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default password - change in .env
+ADMIN_PASSWORD = os.getenv(
+    "ADMIN_PASSWORD", "admin123"
+)  # Default password - change in .env
 
 # --- Background Scheduler: Email -> Discord Forwarder ------------------------
 # Import the worker function from the standalone script
 try:
     from email_to_discord import fetch_and_forward as _email_to_discord_run_once
+
     _EMAIL_TO_DISCORD_AVAILABLE = True
 except Exception as _e:
     print(f"[Email→Discord] Forwarder unavailable: {_e}")
     _EMAIL_TO_DISCORD_AVAILABLE = False
 
 # Config via env (optional overrides)
-EMAIL_TO_DISCORD_ENABLED = os.getenv("EMAIL_TO_DISCORD_ENABLED", "true").lower() == "true"
-EMAIL_TO_DISCORD_INTERVAL_SECONDS = int(os.getenv("EMAIL_TO_DISCORD_INTERVAL_SECONDS", "900"))
-EMAIL_TO_DISCORD_START_EAGER = os.getenv("EMAIL_TO_DISCORD_START_EAGER", "true").lower() == "true"
+EMAIL_TO_DISCORD_ENABLED = (
+    os.getenv("EMAIL_TO_DISCORD_ENABLED", "true").lower() == "true"
+)
+EMAIL_TO_DISCORD_INTERVAL_SECONDS = int(
+    os.getenv("EMAIL_TO_DISCORD_INTERVAL_SECONDS", "900")
+)
+EMAIL_TO_DISCORD_START_EAGER = (
+    os.getenv("EMAIL_TO_DISCORD_START_EAGER", "true").lower() == "true"
+)
 
 _email_discord_stop = threading.Event()
 _email_discord_thread = None
+
 
 def _email_to_discord_worker(interval_sec: int):
     logging.getLogger().setLevel(logging.INFO)
     while not _email_discord_stop.is_set():
         try:
             # Only run if all required env vars exist
-            required_vars = ["IMAP_USER", "IMAP_PASS", "IMAP_HOST", "DISCORD_WEBHOOK_URL"]
-            if _EMAIL_TO_DISCORD_AVAILABLE and all(os.getenv(v) for v in required_vars) and EMAIL_TO_DISCORD_ENABLED:
+            required_vars = [
+                "IMAP_USER",
+                "IMAP_PASS",
+                "IMAP_HOST",
+                "DISCORD_WEBHOOK_URL",
+            ]
+            if (
+                _EMAIL_TO_DISCORD_AVAILABLE
+                and all(os.getenv(v) for v in required_vars)
+                and EMAIL_TO_DISCORD_ENABLED
+            ):
                 _email_to_discord_run_once()
             else:
-                logging.info("[Email→Discord] Skipping worker: missing environment variables")
+                logging.info(
+                    "[Email→Discord] Skipping worker: missing environment variables"
+                )
         except Exception as e:
             logging.exception("[Email→Discord] Worker error: %s", e)
         # Sleep in 1s ticks so we can stop quickly
@@ -663,12 +745,15 @@ def _email_to_discord_worker(interval_sec: int):
                 break
             time.sleep(1)
 
+
 def start_email_to_discord_scheduler():
     global _email_discord_thread
     if not _EMAIL_TO_DISCORD_AVAILABLE:
         return
     if not EMAIL_TO_DISCORD_ENABLED:
-        print("[Email→Discord] Scheduler disabled via env (EMAIL_TO_DISCORD_ENABLED=false)")
+        print(
+            "[Email→Discord] Scheduler disabled via env (EMAIL_TO_DISCORD_ENABLED=false)"
+        )
         return
     # Avoid starting twice (e.g., Flask debug reloader)
     if getattr(app, "_email_discord_started", False):
@@ -681,14 +766,17 @@ def start_email_to_discord_scheduler():
         return
     os.environ["EMAIL_TO_DISCORD_ALREADY_STARTED"] = "1"
     app._email_discord_started = True
-    print(f"[Email→Discord] Starting scheduler every {EMAIL_TO_DISCORD_INTERVAL_SECONDS}s")
+    print(
+        f"[Email→Discord] Starting scheduler every {EMAIL_TO_DISCORD_INTERVAL_SECONDS}s"
+    )
     _email_discord_thread = threading.Thread(
         target=_email_to_discord_worker,
         args=(EMAIL_TO_DISCORD_INTERVAL_SECONDS,),
         daemon=True,
-        name="EmailToDiscordWorker"
+        name="EmailToDiscordWorker",
     )
     _email_discord_thread.start()
+
 
 def stop_email_to_discord_scheduler():
     _email_discord_stop.set()
@@ -697,6 +785,7 @@ def stop_email_to_discord_scheduler():
             _email_discord_thread.join(timeout=3)
     except Exception:
         pass
+
 
 # Ensure background workers are stopped on process exit
 atexit.register(stop_email_to_discord_scheduler)
@@ -708,7 +797,8 @@ if EMAIL_TO_DISCORD_START_EAGER:
     except Exception as _e:
         print(f"[Email→Discord] Failed to start scheduler on boot: {_e}")
 
-@app.route('/')
+
+@app.route("/")
 def index():
     file_path, date_str, file_timestamp = get_latest_csv_file()
     if not file_path or not date_str:
@@ -725,12 +815,12 @@ def index():
             latest_file = file_path
             latest_date = date_str
             time_ago = "Recently"
-    
+
     print(f"Latest file: {latest_file}, Date: {latest_date}, Time ago: {time_ago}")
-    return render_template('index.html', 
-                         saved_file=latest_file, 
-                         latest_date=latest_date,
-                         time_ago=time_ago)
+    return render_template(
+        "index.html", saved_file=latest_file, latest_date=latest_date, time_ago=time_ago
+    )
+
 
 @app.route("/get_chart_data")
 def get_chart_data():
@@ -741,39 +831,53 @@ def get_chart_data():
     if chart_type == "last_day":
         data = get_last_day_data()
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the last day."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the last day."}
+            ), 400
         return jsonify(data)
     elif chart_type == "last_week":
         data = get_last_week_range()
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the selected range."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the selected range."}
+            ), 400
         return jsonify(data)
     elif chart_type == "last_month":
         data = get_last_month_range()
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the selected range."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the selected range."}
+            ), 400
         return jsonify(data)
     elif chart_type == "last_year":
         data = get_last_year_range()
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the selected range."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the selected range."}
+            ), 400
         return jsonify(data)
     elif chart_type == "last_90_days":
         data = get_last_90_days_range()
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the selected range."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the selected range."}
+            ), 400
         return jsonify(data)
     elif chart_type == "last_180_days":
         data = get_last_180_days_range()
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the selected range."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the selected range."}
+            ), 400
         return jsonify(data)
     elif chart_type == "custom" and start and end:
         start_date = datetime.strptime(start, "%Y-%m-%d").date()
         end_date = datetime.strptime(end, "%Y-%m-%d").date()
         data = get_chart_data_for_range(start_date, end_date)
         if not data or "error" in data:
-            return jsonify({"error": "Not enough data available for the selected range."}), 400
+            return jsonify(
+                {"error": "Not enough data available for the selected range."}
+            ), 400
         return jsonify(data)
     elif chart_type == "total":
         data = get_chart_total()
@@ -782,6 +886,7 @@ def get_chart_data():
         return jsonify(data)
     else:
         return jsonify({"error": "Invalid request"}), 400
+
 
 @app.route("/visualization")
 def visualization():
@@ -792,19 +897,24 @@ def visualization():
         # Try to get the latest file info for date formatting
         file_path, date_str, file_timestamp = get_latest_csv_file()
         if date_str:
-            latest_date_fmt = datetime.strptime(date_str, "%Y-%m-%d").strftime("%B %d, %Y")
+            latest_date_fmt = datetime.strptime(date_str, "%Y-%m-%d").strftime(
+                "%B %d, %Y"
+            )
             time_ago = get_time_ago_string(file_timestamp)
     except Exception:
         latest_date_fmt = "Recent data"
         time_ago = "Recently"
-    
+
     # Don't pre-load chart data - let the frontend handle it via AJAX
-    return render_template("graphs-modern.html", 
-                         labels=[], 
-                         values=[], 
-                         colors=[], 
-                         latest_date=latest_date_fmt,
-                         time_ago=time_ago)
+    return render_template(
+        "graphs-modern.html",
+        labels=[],
+        values=[],
+        colors=[],
+        latest_date=latest_date_fmt,
+        time_ago=time_ago,
+    )
+
 
 def flask_progress_callback(msg, progress_percent, latest_date=None, saved_file=None):
     payload = {"msg": msg, "percent": progress_percent}
@@ -814,160 +924,182 @@ def flask_progress_callback(msg, progress_percent, latest_date=None, saved_file=
         payload["saved_file"] = saved_file
     progress_queue.put(json.dumps(payload))
 
-@app.route('/progress_stream')
+
+@app.route("/progress_stream")
 def progress_stream():
     def event_stream():
         while True:
             message = progress_queue.get()
             yield f"data: {message}\n\n"
+
     return Response(event_stream(), mimetype="text/event-stream")
 
-@app.route('/local_status')
+
+@app.route("/local_status")
 def local_status():
     """Check local file status and list available CSV files"""
     try:
         csv_files = get_csv_files_from_folder()
-        
+
         if csv_files:
             # Extract dates from filenames
             available_dates = []
             for file in csv_files:
                 filename = os.path.basename(file)
-                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
                 if date_match:
                     available_dates.append(date_match.group(1))
-            
-            available_dates.sort(reverse=True)  # Most recent first
-            
-            return jsonify({
-                'success': True,
-                'connection_status': 'Local files available',
-                'local_files_count': len(csv_files),
-                'csv_files': [os.path.basename(f) for f in csv_files[:10]],  # Show first 10 files
-                'available_dates': available_dates[:10],  # Show first 10 dates
-                'latest_date': available_dates[0] if available_dates else None,
-                'data_folder': DATA_FOLDER
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': f'No CSV files found in {DATA_FOLDER} folder'
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f"Error checking local files: {str(e)}"
-        })
 
-@app.route('/get_available_dates')
+            available_dates.sort(reverse=True)  # Most recent first
+
+            return jsonify(
+                {
+                    "success": True,
+                    "connection_status": "Local files available",
+                    "local_files_count": len(csv_files),
+                    "csv_files": [
+                        os.path.basename(f) for f in csv_files[:10]
+                    ],  # Show first 10 files
+                    "available_dates": available_dates[:10],  # Show first 10 dates
+                    "latest_date": available_dates[0] if available_dates else None,
+                    "data_folder": DATA_FOLDER,
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": f"No CSV files found in {DATA_FOLDER} folder",
+                }
+            )
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "error": f"Error checking local files: {str(e)}"}
+        )
+
+
+@app.route("/get_available_dates")
 def get_available_dates():
     """Get available dates from CSV files for datepicker highlighting"""
     try:
         csv_files = get_csv_files_from_folder()
-        
+
         if csv_files:
             # Extract dates from filenames
             available_dates = []
             for file in csv_files:
                 filename = os.path.basename(file)
-                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
                 if date_match:
                     available_dates.append(date_match.group(1))
-            
-            available_dates.sort(reverse=True)  # Most recent first
-            
-            return jsonify({
-                'success': True,
-                'available_dates': available_dates,
-                'count': len(available_dates),
-                'latest_date': available_dates[0] if available_dates else None
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'available_dates': [],
-                'error': f'No CSV files found in {DATA_FOLDER} folder'
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'available_dates': [],
-            'error': f"Error getting available dates: {str(e)}"
-        })
 
-@app.route('/refresh_files')
+            available_dates.sort(reverse=True)  # Most recent first
+
+            return jsonify(
+                {
+                    "success": True,
+                    "available_dates": available_dates,
+                    "count": len(available_dates),
+                    "latest_date": available_dates[0] if available_dates else None,
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "success": False,
+                    "available_dates": [],
+                    "error": f"No CSV files found in {DATA_FOLDER} folder",
+                }
+            )
+
+    except Exception as e:
+        return jsonify(
+            {
+                "success": False,
+                "available_dates": [],
+                "error": f"Error getting available dates: {str(e)}",
+            }
+        )
+
+
+@app.route("/refresh_files")
 def refresh_files():
     """Refresh the list of available local CSV files"""
     try:
         csv_files = get_csv_files_from_folder()
-        
+
         if csv_files:
             # Extract dates and file info
             file_info = []
             for file_path in csv_files:
                 filename = os.path.basename(file_path)
-                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
                 file_size = os.path.getsize(file_path)
                 file_modified = datetime.fromtimestamp(os.path.getmtime(file_path))
-                
-                file_info.append({
-                    'filename': filename,
-                    'date': date_match.group(1) if date_match else 'unknown',
-                    'size_bytes': file_size,
-                    'modified': file_modified.strftime("%Y-%m-%d %H:%M:%S")
-                })
-            
-            return jsonify({
-                'success': True,
-                'total_files': len(csv_files),
-                'files': file_info,
-                'message': f"Found {len(csv_files)} CSV files in local folder"
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'total_files': 0,
-                'files': [],
-                'message': f"No CSV files found in {DATA_FOLDER} folder"
-            })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f"Error refreshing files: {str(e)}"
-        })
 
-@app.route('/list_files')
+                file_info.append(
+                    {
+                        "filename": filename,
+                        "date": date_match.group(1) if date_match else "unknown",
+                        "size_bytes": file_size,
+                        "modified": file_modified.strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
+
+            return jsonify(
+                {
+                    "success": True,
+                    "total_files": len(csv_files),
+                    "files": file_info,
+                    "message": f"Found {len(csv_files)} CSV files in local folder",
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "success": False,
+                    "total_files": 0,
+                    "files": [],
+                    "message": f"No CSV files found in {DATA_FOLDER} folder",
+                }
+            )
+
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Error refreshing files: {str(e)}"})
+
+
+@app.route("/list_files")
 def list_files():
     """List all CSV files in the local folder"""
     try:
         if os.path.exists(DATA_FOLDER):
-            csv_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
+            csv_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith(".csv")]
             file_count = len(csv_files)
-            
+
             # Sort files by name (which includes date)
             csv_files.sort(reverse=True)
-            
-            return jsonify({
-                'success': True,
-                'message': f"Found {file_count} CSV files in local folder.",
-                'files': csv_files,
-                'folder_path': os.path.abspath(DATA_FOLDER)
-            })
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"Found {file_count} CSV files in local folder.",
+                    "files": csv_files,
+                    "folder_path": os.path.abspath(DATA_FOLDER),
+                }
+            )
         else:
-            return jsonify({
-                'success': False,
-                'message': f"Data folder '{DATA_FOLDER}' does not exist.",
-                'files': [],
-                'folder_path': os.path.abspath(DATA_FOLDER)
-            })
+            return jsonify(
+                {
+                    "success": False,
+                    "message": f"Data folder '{DATA_FOLDER}' does not exist.",
+                    "files": [],
+                    "folder_path": os.path.abspath(DATA_FOLDER),
+                }
+            )
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f"Error listing files: {str(e)}"
-        })
+        return jsonify({"success": False, "error": f"Error listing files: {str(e)}"})
+
 
 def cleanup_on_exit():
     """Clean up function for graceful shutdown"""
@@ -977,84 +1109,93 @@ def cleanup_on_exit():
     except Exception as e:
         print(f"Error during cleanup: {str(e)}")
 
+
 def signal_handler(sig, frame):
     """Handle Ctrl+C gracefully"""
     print("\nShutting down gracefully...")
     cleanup_on_exit()
     sys.exit(0)
 
+
 # Register cleanup functions
 atexit.register(cleanup_on_exit)
 signal.signal(signal.SIGINT, signal_handler)
 
-@app.route('/get_simple_stats')
+
+@app.route("/get_simple_stats")
 def get_simple_stats():
     """Get basic stats without full chart processing"""
     try:
         file_path, date_str, file_timestamp = get_latest_csv_file()
         if not file_path or not os.path.exists(file_path):
-            return jsonify({
-                "error": "No data file available",
-                "stats": {
-                    "total_points": 0,
-                    "active_members": 0,
-                    "top_performers": []
+            return jsonify(
+                {
+                    "error": "No data file available",
+                    "stats": {
+                        "total_points": 0,
+                        "active_members": 0,
+                        "top_performers": [],
+                    },
                 }
-            })
-        
+            )
+
         # Load CSV directly
         df = pd.read_csv(file_path)
         df.columns = df.columns.str.strip()
         df = df.rename(columns={"name": "Member", "points": "Points"})
-        
+
         # Calculate basic stats
         total_points = int(df["Points"].sum())
         active_members = len(df[df["Points"] > 0])
-        
+
         # Get top 5 performers
-        top_performers = df[df["Points"] > 0].nlargest(5, "Points").to_dict('records')
-        
-        return jsonify({
-            "success": True,
-            "stats": {
-                "total_points": total_points,
-                "active_members": active_members,
-                "top_performers": [
-                    {
-                        "name": performer["Member"],
-                        "points": int(performer["Points"])
-                    } for performer in top_performers
-                ]
+        top_performers = df[df["Points"] > 0].nlargest(5, "Points").to_dict("records")
+
+        return jsonify(
+            {
+                "success": True,
+                "stats": {
+                    "total_points": total_points,
+                    "active_members": active_members,
+                    "top_performers": [
+                        {
+                            "name": performer["Member"],
+                            "points": int(performer["Points"]),
+                        }
+                        for performer in top_performers
+                    ],
+                },
             }
-        })
-        
+        )
+
     except Exception as e:
         print(f"Error getting simple stats: {str(e)}")
-        return jsonify({
-            "error": f"Error loading stats: {str(e)}",
-            "stats": {
-                "total_points": 0,
-                "active_members": 0,
-                "top_performers": []
+        return jsonify(
+            {
+                "error": f"Error loading stats: {str(e)}",
+                "stats": {"total_points": 0, "active_members": 0, "top_performers": []},
             }
-        })
+        )
 
-@app.route('/get_latest_file_info')
+
+@app.route("/get_latest_file_info")
 def get_latest_file_info():
     """Get information about the latest CSV file for real-time updates"""
     try:
         file_path, date_str, file_timestamp = get_latest_csv_file()
-        
+
         if not file_path or not date_str:
-            return jsonify({
-                "success": False,
-                "message": "No CSV files found",
-                "latest_file": "No data",
-                "latest_date": "No data",
-                "time_ago": "No recent data",
-                "file_count": 0
-            })
-        
+            return jsonify(
+                {
+                    "success": False,
+                    "message": "No CSV files found",
+                    "latest_file": "No data",
+                    "latest_date": "No data",
+                    "time_ago": "No recent data",
+                    "file_count": 0,
+                }
+            )
+
         # Format the information
         try:
             latest_file = os.path.basename(file_path)
@@ -1064,102 +1205,102 @@ def get_latest_file_info():
             latest_file = os.path.basename(file_path) if file_path else "Unknown"
             latest_date = date_str
             time_ago = "Recently"
-        
+
         # Get total file count
         csv_files = get_csv_files_from_folder()
-        
-        return jsonify({
-            "success": True,
-            "latest_file": latest_file,
-            "latest_date": latest_date,
-            "time_ago": time_ago,
-            "file_count": len(csv_files),
-            "file_path": file_path,
-            "date_str": date_str
-        })
-        
+
+        return jsonify(
+            {
+                "success": True,
+                "latest_file": latest_file,
+                "latest_date": latest_date,
+                "time_ago": time_ago,
+                "file_count": len(csv_files),
+                "file_path": file_path,
+                "date_str": date_str,
+            }
+        )
+
     except Exception as e:
         print(f"Error getting latest file info: {str(e)}")
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "message": "Error retrieving file information"
-        })
+        return jsonify(
+            {
+                "success": False,
+                "error": str(e),
+                "message": "Error retrieving file information",
+            }
+        )
 
-@app.route('/get_updates')
+
+@app.route("/get_updates")
 def get_updates():
     """Read update history from updates.txt file"""
     try:
-        updates_file = os.path.join('static', 'updates.txt')
-        
+        updates_file = os.path.join("static", "updates.txt")
+
         if not os.path.exists(updates_file):
-            return jsonify({
-                "success": False,
-                "error": "Updates file not found",
-                "updates": []
-            })
-        
+            return jsonify(
+                {"success": False, "error": "Updates file not found", "updates": []}
+            )
+
         updates = []
-        
-        with open(updates_file, 'r', encoding='utf-8') as f:
+
+        with open(updates_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
-        
+
         for line in lines:
             line = line.strip()
-            
+
             # Skip comments and empty lines
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
-            
+
             try:
                 # Parse format: VERSION|DATE|TITLE|FEATURES (semicolon separated)
-                parts = line.split('|')
+                parts = line.split("|")
                 if len(parts) >= 4:
                     version = parts[0].strip()
                     date = parts[1].strip()
                     title = parts[2].strip()
                     features_text = parts[3].strip()
-                    
+
                     # Split features by semicolon
-                    features = [f.strip() for f in features_text.split(';') if f.strip()]
-                    
+                    features = [
+                        f.strip() for f in features_text.split(";") if f.strip()
+                    ]
+
                     update_item = {
                         "version": version,
                         "date": date,
                         "title": title,
                         "features": features,
-                        "is_current": version.lower().startswith("current")
+                        "is_current": version.lower().startswith("current"),
                     }
-                    
+
                     updates.append(update_item)
-                    
+
             except Exception as e:
                 print(f"Error parsing update line '{line}': {e}")
                 continue
-        
-        return jsonify({
-            "success": True,
-            "updates": updates
-        })
-        
+
+        return jsonify({"success": True, "updates": updates})
+
     except Exception as e:
         print(f"Error reading updates file: {str(e)}")
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "updates": []
-        })
+        return jsonify({"success": False, "error": str(e), "updates": []})
+
 
 def parse_joined_date(joined_date_str):
     """Parse the joined date string to datetime object"""
     try:
         # Handle format like "December 19th, 2023"
         # Remove ordinal suffixes (st, nd, rd, th)
-        cleaned_date = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', joined_date_str)
+        cleaned_date = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", joined_date_str)
         return datetime.strptime(cleaned_date, "%B %d, %Y")
     except Exception as e:
         print(f"Error parsing date '{joined_date_str}': {e}")
         return None
+
 
 def get_member_probation_status():
     """Calculate probation status for all members"""
@@ -1169,128 +1310,132 @@ def get_member_probation_status():
         csv_files = get_csv_files_from_folder()
         if not csv_files:
             return {"error": "No CSV files found"}
-        
+
         # Get current date for calculations
         current_date = datetime.now()
-        
+
         # Load the latest CSV to get current member list
         latest_file = csv_files[0]
         latest_df = pd.read_csv(latest_file)
-        
+
         # Clean column names first
         latest_df.columns = latest_df.columns.str.strip()
-        
+
         # Store original column names for debugging
         original_columns = list(latest_df.columns)
         print(f"Original columns in latest file: {original_columns}")
-        
+
         # Apply standard renames but preserve other columns
         column_renames = {}
         if "name" in latest_df.columns:
             column_renames["name"] = "Member"
         if "points" in latest_df.columns:
             column_renames["points"] = "Points"
-        
+
         if column_renames:
             latest_df = latest_df.rename(columns=column_renames)
-        
+
         print(f"Columns after rename: {list(latest_df.columns)}")
-        
+
         # Verify required columns exist
         if "Member" not in latest_df.columns or "Points" not in latest_df.columns:
-            return {"error": f"Required columns (Member, Points) missing. Found columns: {list(latest_df.columns)}"}
-        
+            return {
+                "error": f"Required columns (Member, Points) missing. Found columns: {list(latest_df.columns)}"
+            }
+
         if "Joined Date" not in latest_df.columns:
-            return {"error": f"Joined Date column missing. Found columns: {list(latest_df.columns)}. Please ensure your CSV files contain member join date information."}
-        
+            return {
+                "error": f"Joined Date column missing. Found columns: {list(latest_df.columns)}. Please ensure your CSV files contain member join date information."
+            }
+
         members_status = []
-        
+
         for _, member_row in latest_df.iterrows():
             try:
-                member_name = member_row['Member']
-                joined_date_str = str(member_row['Joined Date']).strip('"')
-                current_points = int(member_row['Points'])
-                
+                member_name = member_row["Member"]
+                joined_date_str = str(member_row["Joined Date"]).strip('"')
+                current_points = int(member_row["Points"])
+
                 # Parse joined date
                 joined_date = parse_joined_date(joined_date_str)
                 if not joined_date:
                     continue
-                
+
                 # Calculate time since joining
                 days_since_joined = (current_date - joined_date).days
-                
+
                 # Define probation milestones
                 week_1_target = 250000  # 250k points
-                month_1_target = 1000000  # 1M points  
+                month_1_target = 1000000  # 1M points
                 month_3_target = 3000000  # 3M points
-                
+
                 # Calculate milestone dates
                 week_1_date = joined_date + timedelta(days=7)
                 month_1_date = joined_date + timedelta(days=30)
                 month_3_date = joined_date + timedelta(days=90)
-                
+
                 # Track points at each milestone - use None to indicate no data found
                 week_1_points = None
                 month_1_points = None
                 month_3_points = current_points  # Current total
-                
+
                 # Go through historical data to find points at milestone dates
                 for csv_file in reversed(csv_files):  # Start from oldest
                     try:
                         # Extract date from filename
                         filename = os.path.basename(csv_file)
-                        date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                        date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
                         if not date_match:
                             continue
-                        
+
                         file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
-                        
+
                         # Skip files before the member joined
                         if file_date < joined_date:
                             continue
-                        
+
                         # Load CSV and find member
                         df = pd.read_csv(csv_file)
-                        
+
                         # Clean column names first
                         df.columns = df.columns.str.strip()
-                        
-                        # Apply standard renames but preserve other columns  
+
+                        # Apply standard renames but preserve other columns
                         column_renames = {}
                         if "name" in df.columns:
                             column_renames["name"] = "Member"
                         if "points" in df.columns:
                             column_renames["points"] = "Points"
-                        
+
                         if column_renames:
                             df = df.rename(columns=column_renames)
-                        
+
                         # Skip if essential columns are missing
                         if "Member" not in df.columns or "Points" not in df.columns:
                             continue
-                        
+
                         # Find member data
-                        member_data = df[df['Member'] == member_name]
-                        
+                        member_data = df[df["Member"] == member_name]
+
                         if member_data.empty:
                             continue
-                        
-                        points_at_date = int(member_data.iloc[0]['Points'])
-                        
+
+                        points_at_date = int(member_data.iloc[0]["Points"])
+
                         # Record points at milestone dates (find closest date after milestone)
                         if file_date >= week_1_date and week_1_points is None:
                             week_1_points = points_at_date
                         if file_date >= month_1_date and month_1_points is None:
                             month_1_points = points_at_date
-                            
+
                     except Exception as e:
                         continue
-                
+
                 # Calculate remaining points needed (always show actual remaining, even after deadline)
                 week_1_remaining = max(0, week_1_target - current_points)
                 month_1_remaining = max(0, month_1_target - current_points)
                 month_3_remaining = max(0, month_3_target - current_points)
-                
+
                 # Enhanced logic: check if milestone is passed
                 # A milestone is passed if:
                 # 1. The deadline has passed AND they had enough points at the deadline (historical data), OR
@@ -1305,11 +1450,19 @@ def get_member_probation_status():
                         week_1_passed = week_1_points >= week_1_target
                     else:
                         # No historical data - can't determine failure, check current achievement
-                        week_1_passed = current_points >= week_1_target if current_points >= week_1_target else None
+                        week_1_passed = (
+                            current_points >= week_1_target
+                            if current_points >= week_1_target
+                            else None
+                        )
                 else:
                     # Deadline hasn't passed - check if they already achieved it
-                    week_1_passed = current_points >= week_1_target if current_points >= week_1_target else None
-                
+                    week_1_passed = (
+                        current_points >= week_1_target
+                        if current_points >= week_1_target
+                        else None
+                    )
+
                 month_1_passed = None
                 if current_date >= month_1_date:
                     # Deadline has passed
@@ -1318,42 +1471,62 @@ def get_member_probation_status():
                         month_1_passed = month_1_points >= month_1_target
                     else:
                         # No historical data - can't determine failure, check current achievement
-                        month_1_passed = current_points >= month_1_target if current_points >= month_1_target else None
+                        month_1_passed = (
+                            current_points >= month_1_target
+                            if current_points >= month_1_target
+                            else None
+                        )
                 else:
                     # Deadline hasn't passed - check if they already achieved it
-                    month_1_passed = current_points >= month_1_target if current_points >= month_1_target else None
-                
+                    month_1_passed = (
+                        current_points >= month_1_target
+                        if current_points >= month_1_target
+                        else None
+                    )
+
                 month_3_passed = None
                 if current_date >= month_3_date:
                     # Deadline has passed - always use current points as we have that data
                     month_3_passed = month_3_points >= month_3_target
                 else:
                     # Deadline hasn't passed - check if they already achieved it
-                    month_3_passed = current_points >= month_3_target if current_points >= month_3_target else None
-                
+                    month_3_passed = (
+                        current_points >= month_3_target
+                        if current_points >= month_3_target
+                        else None
+                    )
+
                 # Apply admin overrides (tri-state: None, True, False)
-                override = overrides.get(member_name, {}) if isinstance(overrides, dict) else {}
-                if 'week_1' in override:
-                    if override.get('week_1') is True:
+                override = (
+                    overrides.get(member_name, {})
+                    if isinstance(overrides, dict)
+                    else {}
+                )
+                if "week_1" in override:
+                    if override.get("week_1") is True:
                         week_1_passed = True
-                    elif override.get('week_1') is False:
+                    elif override.get("week_1") is False:
                         week_1_passed = False
-                if 'month_1' in override:
-                    if override.get('month_1') is True:
+                if "month_1" in override:
+                    if override.get("month_1") is True:
                         month_1_passed = True
-                    elif override.get('month_1') is False:
+                    elif override.get("month_1") is False:
                         month_1_passed = False
-                if 'month_3' in override:
-                    if override.get('month_3') is True:
+                if "month_3" in override:
+                    if override.get("month_3") is True:
                         month_3_passed = True
-                    elif override.get('month_3') is False:
+                    elif override.get("month_3") is False:
                         month_3_passed = False
 
                 # Determine overall probation status
                 probation_status = "in_progress"
-                
+
                 # Check if they completed all probation (passed all 3 milestones)
-                if week_1_passed == True and month_1_passed == True and month_3_passed == True:
+                if (
+                    week_1_passed == True
+                    and month_1_passed == True
+                    and month_3_passed == True
+                ):
                     probation_status = "passed"
                 # Check if they failed any milestone (only if deadline has passed AND they failed)
                 elif current_date >= month_3_date and month_3_passed == False:
@@ -1362,226 +1535,332 @@ def get_member_probation_status():
                     probation_status = "failed"
                 elif current_date >= week_1_date and week_1_passed == False:
                     probation_status = "failed"
-                
+
                 # Post-probation compliance tracking (only for members who passed probation)
                 post_probation_status = None
                 post_probation_periods = []
-                
+
                 if probation_status == "passed":
                     # Calculate post-probation periods (90-day intervals starting after probation ends)
                     probation_end_date = month_3_date  # Probation ends after 3 months
-                    
+
                     # Check if enough time has passed to start post-probation tracking
                     if current_date >= probation_end_date:
                         # Calculate all 90-day periods since probation ended
                         period_start = probation_end_date
                         period_number = 1
-                        
+
                         # Process all periods (completed and current active period)
                         # Process all periods (completed and current active period)
                         while period_start <= current_date:
                             period_end = period_start + timedelta(days=90)
-                            is_current_period = current_date < period_end  # True if this is the ongoing period
-                            
+                            is_current_period = (
+                                current_date < period_end
+                            )  # True if this is the ongoing period
+
                             # Find points at start and end of this period
                             points_at_start = 0
                             points_at_end = 0
-                            
+
                             # Look through historical data for points at period boundaries
                             # We need EXACT dates for both boundaries, not closest approximations
                             period_start_found = False
                             period_end_found = False
-                            
+
                             # Debug: print period info for current calculations
-                            print(f"Processing period {period_number} for {member_name}: {period_start.date()} to {period_end.date()}, current_period: {is_current_period}")
-                            
-                            for csv_file in csv_files:  # Check all files, not just reversed
+                            print(
+                                f"Processing period {period_number} for {member_name}: {period_start.date()} to {period_end.date()}, current_period: {is_current_period}"
+                            )
+
+                            for (
+                                csv_file
+                            ) in csv_files:  # Check all files, not just reversed
                                 try:
                                     filename = os.path.basename(csv_file)
-                                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                                    date_match = re.search(
+                                        r"(\d{4}-\d{2}-\d{2})", filename
+                                    )
                                     if not date_match:
                                         continue
-                                    
-                                    file_date = datetime.strptime(date_match.group(1), "%Y-%m-%d")
-                                    
+
+                                    file_date = datetime.strptime(
+                                        date_match.group(1), "%Y-%m-%d"
+                                    )
+
                                     # Check for EXACT match with period start date
-                                    if file_date.date() == period_start.date() and not period_start_found:
+                                    if (
+                                        file_date.date() == period_start.date()
+                                        and not period_start_found
+                                    ):
                                         # Load CSV and find member for period start
                                         df = pd.read_csv(csv_file)
                                         df.columns = df.columns.str.strip()
-                                        
+
                                         column_renames = {}
                                         if "name" in df.columns:
                                             column_renames["name"] = "Member"
                                         if "points" in df.columns:
                                             column_renames["points"] = "Points"
-                                        
+
                                         if column_renames:
                                             df = df.rename(columns=column_renames)
-                                        
-                                        if "Member" not in df.columns or "Points" not in df.columns:
+
+                                        if (
+                                            "Member" not in df.columns
+                                            or "Points" not in df.columns
+                                        ):
                                             continue
-                                        
-                                        member_data = df[df['Member'] == member_name]
+
+                                        member_data = df[df["Member"] == member_name]
                                         if not member_data.empty:
-                                            points_at_start = int(member_data.iloc[0]['Points'])
+                                            points_at_start = int(
+                                                member_data.iloc[0]["Points"]
+                                            )
                                             period_start_found = True
-                                            print(f"Found period start data: {points_at_start} points on {file_date.date()}")
-                                    
+                                            print(
+                                                f"Found period start data: {points_at_start} points on {file_date.date()}"
+                                            )
+
                                     # For current period, use current points instead of end date
                                     if is_current_period:
                                         # For ongoing period, use the latest available CSV file for current points
                                         # Since current_date might not have a CSV, use the latest file
-                                        if csv_file == csv_files[0]:  # This is the latest/most recent file
+                                        if (
+                                            csv_file == csv_files[0]
+                                        ):  # This is the latest/most recent file
                                             df = pd.read_csv(csv_file)
                                             df.columns = df.columns.str.strip()
-                                            
+
                                             column_renames = {}
                                             if "name" in df.columns:
                                                 column_renames["name"] = "Member"
                                             if "points" in df.columns:
                                                 column_renames["points"] = "Points"
-                                            
+
                                             if column_renames:
                                                 df = df.rename(columns=column_renames)
-                                            
-                                            if "Member" not in df.columns or "Points" not in df.columns:
+
+                                            if (
+                                                "Member" not in df.columns
+                                                or "Points" not in df.columns
+                                            ):
                                                 continue
-                                            
-                                            member_data = df[df['Member'] == member_name]
+
+                                            member_data = df[
+                                                df["Member"] == member_name
+                                            ]
                                             if not member_data.empty:
-                                                points_at_end = int(member_data.iloc[0]['Points'])
+                                                points_at_end = int(
+                                                    member_data.iloc[0]["Points"]
+                                                )
                                                 period_end_found = True
-                                                print(f"Found current period end data: {points_at_end} points on {file_date.date()}")
+                                                print(
+                                                    f"Found current period end data: {points_at_end} points on {file_date.date()}"
+                                                )
                                     else:
                                         # Check for EXACT match with period end date (completed periods only)
-                                        if file_date.date() == period_end.date() and not period_end_found:
+                                        if (
+                                            file_date.date() == period_end.date()
+                                            and not period_end_found
+                                        ):
                                             # Load CSV and find member for period end
                                             df = pd.read_csv(csv_file)
                                             df.columns = df.columns.str.strip()
-                                            
+
                                             column_renames = {}
                                             if "name" in df.columns:
                                                 column_renames["name"] = "Member"
                                             if "points" in df.columns:
                                                 column_renames["points"] = "Points"
-                                            
+
                                             if column_renames:
                                                 df = df.rename(columns=column_renames)
-                                            
-                                            if "Member" not in df.columns or "Points" not in df.columns:
+
+                                            if (
+                                                "Member" not in df.columns
+                                                or "Points" not in df.columns
+                                            ):
                                                 continue
-                                            
-                                            member_data = df[df['Member'] == member_name]
+
+                                            member_data = df[
+                                                df["Member"] == member_name
+                                            ]
                                             if not member_data.empty:
-                                                points_at_end = int(member_data.iloc[0]['Points'])
+                                                points_at_end = int(
+                                                    member_data.iloc[0]["Points"]
+                                                )
                                                 period_end_found = True
-                                                print(f"Found period end data: {points_at_end} points on {file_date.date()}")
-                                    
+                                                print(
+                                                    f"Found period end data: {points_at_end} points on {file_date.date()}"
+                                                )
+
                                     # Stop searching if we found both boundary points
-                                    if period_start_found and (period_end_found or is_current_period):
+                                    if period_start_found and (
+                                        period_end_found or is_current_period
+                                    ):
                                         break
-                                        
+
                                 except Exception as e:
                                     continue
-                            
+
                             # Calculate points earned in this period - ONLY if we have EXACT boundary data
                             points_earned = 0
                             target_points = 3000000  # 3M points per 90-day period
-                            
+
                             # Determine if this period was successful
                             # We REQUIRE exact data for BOTH boundaries to make any determination
                             period_status = "insufficient_data"
-                            if period_start_found and period_end_found and points_at_start >= 0 and points_at_end >= 0:
+                            if (
+                                period_start_found
+                                and period_end_found
+                                and points_at_start >= 0
+                                and points_at_end >= 0
+                            ):
                                 # Ensure we calculate period points correctly
                                 points_earned = max(0, points_at_end - points_at_start)
-                                
+
                                 # Debug output
-                                print(f"Period calculation for {member_name}: start={points_at_start}, end={points_at_end}, earned={points_earned}")
-                                
+                                print(
+                                    f"Period calculation for {member_name}: start={points_at_start}, end={points_at_end}, earned={points_earned}"
+                                )
+
                                 if is_current_period:
                                     # For current period, use time-based risk assessment (accounts for burst earning patterns)
-                                    days_elapsed = max(1, (current_date - period_start).days)  # Ensure at least 1 day
-                                    
+                                    days_elapsed = max(
+                                        1, (current_date - period_start).days
+                                    )  # Ensure at least 1 day
+
                                     if days_elapsed > 0 and days_elapsed <= 90:
                                         if points_earned >= target_points:
-                                            period_status = "compliant"  # Already achieved target
-                                        elif days_elapsed >= 85 and points_earned < target_points:
-                                            period_status = "at_risk"   # Close to deadline without target
+                                            period_status = (
+                                                "compliant"  # Already achieved target
+                                            )
+                                        elif (
+                                            days_elapsed >= 85
+                                            and points_earned < target_points
+                                        ):
+                                            period_status = "at_risk"  # Close to deadline without target
                                         else:
                                             period_status = "on_track"  # Still have time for burst activity
                                 else:
                                     # For completed periods, simple check
-                                    period_status = "compliant" if points_earned >= target_points else "non_compliant"
-                            
+                                    period_status = (
+                                        "compliant"
+                                        if points_earned >= target_points
+                                        else "non_compliant"
+                                    )
+
                             # Store the period info with clear data availability indicators
                             period_info = {
                                 "period_number": period_number,
                                 "start_date": period_start.strftime("%Y-%m-%d"),
                                 "end_date": period_end.strftime("%Y-%m-%d"),
-                                "points_at_start": points_at_start if period_start_found else None,
-                                "points_at_end": points_at_end if period_end_found else None,
-                                "points_earned": points_earned if period_start_found and period_end_found else None,
+                                "points_at_start": points_at_start
+                                if period_start_found
+                                else None,
+                                "points_at_end": points_at_end
+                                if period_end_found
+                                else None,
+                                "points_earned": points_earned
+                                if period_start_found and period_end_found
+                                else None,
                                 "target_points": target_points,
                                 "status": period_status,
                                 "start_date_found": period_start_found,
                                 "end_date_found": period_end_found,
-                                "is_current_period": is_current_period
+                                "is_current_period": is_current_period,
                             }
-                            
+
                             # Add projection data for current period
-                            if is_current_period and period_start_found and period_end_found and period_status != "insufficient_data":
-                                days_elapsed = max(1, (current_date - period_start).days)  # Ensure at least 1 day
+                            if (
+                                is_current_period
+                                and period_start_found
+                                and period_end_found
+                                and period_status != "insufficient_data"
+                            ):
+                                days_elapsed = max(
+                                    1, (current_date - period_start).days
+                                )  # Ensure at least 1 day
                                 days_remaining = max(0, 90 - days_elapsed)
-                                
+
                                 # Additional validation
-                                if days_elapsed > 0 and days_elapsed <= 90 and points_earned >= 0:
+                                if (
+                                    days_elapsed > 0
+                                    and days_elapsed <= 90
+                                    and points_earned >= 0
+                                ):
                                     daily_rate = points_earned / days_elapsed
                                     projected_total = daily_rate * 90
-                                    remaining_needed = max(0, target_points - points_earned)
-                                    daily_needed = remaining_needed / max(1, days_remaining) if days_remaining > 0 else 0
-                                    
-                                    period_info.update({
-                                        "days_elapsed": days_elapsed,
-                                        "days_remaining": days_remaining,
-                                        "daily_rate": daily_rate,
-                                        "projected_total": projected_total,
-                                        "remaining_needed": remaining_needed,
-                                        "daily_needed": daily_needed
-                                    })
-                            
+                                    remaining_needed = max(
+                                        0, target_points - points_earned
+                                    )
+                                    daily_needed = (
+                                        remaining_needed / max(1, days_remaining)
+                                        if days_remaining > 0
+                                        else 0
+                                    )
+
+                                    period_info.update(
+                                        {
+                                            "days_elapsed": days_elapsed,
+                                            "days_remaining": days_remaining,
+                                            "daily_rate": daily_rate,
+                                            "projected_total": projected_total,
+                                            "remaining_needed": remaining_needed,
+                                            "daily_needed": daily_needed,
+                                        }
+                                    )
+
                             post_probation_periods.append(period_info)
-                            
+
                             # Move to next period (but break if current period is ongoing)
                             if is_current_period:
                                 break
                             period_start = period_end
                             period_number += 1
-                        
+
                         # Determine overall post-probation status and limit to 3 most recent periods
                         if post_probation_periods:
                             # Keep only the 3 most recent periods (latest periods have highest period_number)
                             post_probation_periods = post_probation_periods[-3:]
-                            
+
                             # Check if we have sufficient data for evaluation
-                            periods_with_data = [p for p in post_probation_periods if p["status"] != "insufficient_data"]
-                            
+                            periods_with_data = [
+                                p
+                                for p in post_probation_periods
+                                if p["status"] != "insufficient_data"
+                            ]
+
                             # Separate current period from completed periods for status determination
-                            current_periods = [p for p in periods_with_data if p.get("is_current_period", False)]
-                            completed_periods = [p for p in periods_with_data if not p.get("is_current_period", False)]
-                            
+                            current_periods = [
+                                p
+                                for p in periods_with_data
+                                if p.get("is_current_period", False)
+                            ]
+                            completed_periods = [
+                                p
+                                for p in periods_with_data
+                                if not p.get("is_current_period", False)
+                            ]
+
                             if len(periods_with_data) == 0:
                                 # No periods have sufficient data
                                 post_probation_status = "insufficient_data"
                             else:
                                 # Check for any non-compliant completed periods
-                                non_compliant_completed = [p for p in completed_periods if p["status"] == "non_compliant"]
-                                
+                                non_compliant_completed = [
+                                    p
+                                    for p in completed_periods
+                                    if p["status"] == "non_compliant"
+                                ]
+
                                 if non_compliant_completed:
                                     post_probation_status = "non_compliant"
                                 elif current_periods:
                                     # Use current period status if no completed non-compliant periods
-                                    current_status = current_periods[0]["status"]  # Latest current period
+                                    current_status = current_periods[0][
+                                        "status"
+                                    ]  # Latest current period
                                     if current_status == "compliant":
                                         post_probation_status = "compliant"
                                     elif current_status == "on_track":
@@ -1598,8 +1877,10 @@ def get_member_probation_status():
                         else:
                             post_probation_status = "insufficient_data"
                     else:
-                        post_probation_status = "too_early"  # Not enough time passed since probation ended
-                
+                        post_probation_status = (
+                            "too_early"  # Not enough time passed since probation ended
+                        )
+
                 member_status = {
                     "name": member_name,
                     "joined_date": joined_date_str,
@@ -1610,12 +1891,21 @@ def get_member_probation_status():
                     "post_probation_status": post_probation_status,
                     "post_probation_periods": post_probation_periods,
                     "overrides": {
-                        "week_1": (overrides.get(member_name, {}).get('week_1')
-                                    if 'week_1' in overrides.get(member_name, {}) else None),
-                        "month_1": (overrides.get(member_name, {}).get('month_1')
-                                     if 'month_1' in overrides.get(member_name, {}) else None),
-                        "month_3": (overrides.get(member_name, {}).get('month_3')
-                                     if 'month_3' in overrides.get(member_name, {}) else None),
+                        "week_1": (
+                            overrides.get(member_name, {}).get("week_1")
+                            if "week_1" in overrides.get(member_name, {})
+                            else None
+                        ),
+                        "month_1": (
+                            overrides.get(member_name, {}).get("month_1")
+                            if "month_1" in overrides.get(member_name, {})
+                            else None
+                        ),
+                        "month_3": (
+                            overrides.get(member_name, {}).get("month_3")
+                            if "month_3" in overrides.get(member_name, {})
+                            else None
+                        ),
                     },
                     "milestones": {
                         "week_1": {
@@ -1625,7 +1915,9 @@ def get_member_probation_status():
                             "passed": week_1_passed,
                             "deadline": week_1_date.strftime("%Y-%m-%d"),
                             "remaining_points": week_1_remaining,
-                            "days_left": max(0, (week_1_date - current_date).days) if current_date < week_1_date else 0
+                            "days_left": max(0, (week_1_date - current_date).days)
+                            if current_date < week_1_date
+                            else 0,
                         },
                         "month_1": {
                             "target": month_1_target,
@@ -1634,7 +1926,9 @@ def get_member_probation_status():
                             "passed": month_1_passed,
                             "deadline": month_1_date.strftime("%Y-%m-%d"),
                             "remaining_points": month_1_remaining,
-                            "days_left": max(0, (month_1_date - current_date).days) if current_date < month_1_date else 0
+                            "days_left": max(0, (month_1_date - current_date).days)
+                            if current_date < month_1_date
+                            else 0,
                         },
                         "month_3": {
                             "target": month_3_target,
@@ -1643,75 +1937,93 @@ def get_member_probation_status():
                             "passed": month_3_passed,
                             "deadline": month_3_date.strftime("%Y-%m-%d"),
                             "remaining_points": month_3_remaining,
-                            "days_left": max(0, (month_3_date - current_date).days) if current_date < month_3_date else 0
-                        }
-                    }
+                            "days_left": max(0, (month_3_date - current_date).days)
+                            if current_date < month_3_date
+                            else 0,
+                        },
+                    },
                 }
-                
+
                 members_status.append(member_status)
-                
+
             except Exception as e:
                 continue
-        
+
         # Sort by probation status priority and days since joined
         status_priority = {"failed": 0, "in_progress": 1, "completed": 2}
-        members_status.sort(key=lambda x: (status_priority.get(x["probation_status"], 1), x["days_since_joined"]))
-        
+        members_status.sort(
+            key=lambda x: (
+                status_priority.get(x["probation_status"], 1),
+                x["days_since_joined"],
+            )
+        )
+
         return {"success": True, "members": members_status}
-        
+
     except Exception as e:
         print(f"Error calculating probation status: {str(e)}")
         return {"error": str(e)}
 
-@app.route('/member_info')
+
+@app.route("/member_info")
 def member_info():
     """Member info page with probation tracking"""
     try:
         # Get the latest file info for the header
         file_path, date_str, file_timestamp = get_latest_csv_file()
-        
+
         if file_path:
-            latest_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%B %d, %Y") if date_str else "Unknown"
+            latest_date = (
+                datetime.strptime(date_str, "%Y-%m-%d").strftime("%B %d, %Y")
+                if date_str
+                else "Unknown"
+            )
             time_ago = get_time_ago_string(file_timestamp)
         else:
             latest_date = "No data"
             time_ago = "Unknown"
-        
-        return render_template('member-info.html', 
-                             latest_date=latest_date, 
-                             time_ago=time_ago)
-        
+
+        return render_template(
+            "member-info.html", latest_date=latest_date, time_ago=time_ago
+        )
+
     except Exception as e:
         print(f"Error in member_info route: {str(e)}")
-        return render_template('member-info.html', 
-                             latest_date="Error", 
-                             time_ago="Error")
+        return render_template(
+            "member-info.html", latest_date="Error", time_ago="Error"
+        )
 
-@app.route('/get_probation_data')
+
+@app.route("/get_probation_data")
 def get_probation_data():
     """API endpoint to get probation status data"""
     try:
         probation_data = check_probation_cache()
-        
+
         # Check for probation failures and send notifications
-        if NOTIFICATIONS_ENABLED and probation_data and 'members' in probation_data:
+        if NOTIFICATIONS_ENABLED and probation_data and "members" in probation_data:
             try:
                 # Get the current CSV file for notification tracking
                 file_path, _, _ = get_latest_csv_file()
-                threading.Thread(target=notification_service.check_and_notify_failures, args=(probation_data['members'], file_path)).start()
+                threading.Thread(
+                    target=notification_service.check_and_notify_failures,
+                    args=(probation_data["members"], file_path),
+                ).start()
             except Exception as e:
                 print(f"Error sending notifications: {e}")
                 # Don't fail the API call if notifications fail
-        
+
         return jsonify(probation_data)
     except Exception as e:
         print(f"Error in get_probation_data: {str(e)}")
         return jsonify({"error": str(e)})
 
+
 def check_num_csv():
     if not os.path.isdir(DATA_FOLDER):
         return 0, 0
     return len([f for f in os.listdir(DATA_FOLDER) if f.endswith(".csv")])
+
 
 def check_probation_cache():
     csv_count = check_num_csv()
@@ -1734,16 +2046,21 @@ def check_probation_cache():
         json.dump(data, f)
     return data
 
-@app.route('/test_notification')
+
+@app.route("/test_notification")
 def test_notification():
     """Test endpoint to send a sample probation failure notification - requires authentication"""
     # Check if user is authenticated
-    if not session.get('admin_authenticated'):
+    if not session.get("admin_authenticated"):
         return jsonify({"error": "Authentication required"}), 401
-    
+
     if not NOTIFICATIONS_ENABLED:
-        return jsonify({"error": "Notifications not enabled. Check notification_service.py import and email configuration."})
-    
+        return jsonify(
+            {
+                "error": "Notifications not enabled. Check notification_service.py import and email configuration."
+            }
+        )
+
     try:
         # Create a test member data
         test_member = {
@@ -1758,46 +2075,52 @@ def test_notification():
                     "passed": False,
                     "points_at_deadline": 100000,
                     "remaining_points": 400000,
-                    "days_left": 0
+                    "days_left": 0,
                 },
                 "month_1": {
                     "target": 1500000,
                     "passed": False,
                     "points_at_deadline": 250000,
                     "remaining_points": 1250000,
-                    "days_left": 0
+                    "days_left": 0,
                 },
                 "month_3": {
                     "target": 3000000,
                     "passed": None,
                     "points_at_deadline": None,
                     "remaining_points": 2750000,
-                    "days_left": 10
-                }
-            }
+                    "days_left": 10,
+                },
+            },
         }
-        
+
         # Send test notification
         success = notification_service.notify_probation_failure(test_member)
-        
+
         if success:
             return jsonify({"message": "Test notification sent successfully!"})
         else:
-            return jsonify({"error": "Failed to send test notification. Check email configuration."})
-            
+            return jsonify(
+                {
+                    "error": "Failed to send test notification. Check email configuration."
+                }
+            )
+
     except Exception as e:
         return jsonify({"error": f"Error sending test notification: {str(e)}"})
 
-@app.route('/notification-admin')
+
+@app.route("/notification-admin")
 def notification_admin():
     """Admin panel for notification system - requires authentication"""
     # Check if user is authenticated
-    if not session.get('admin_authenticated'):
-        return redirect(url_for('admin_login'))
-    
-    return render_template('notification-admin.html')
+    if not session.get("admin_authenticated"):
+        return redirect(url_for("admin_login"))
 
-@app.route('/api/admin/emails', methods=['GET', 'POST', 'DELETE', 'PATCH'])
+    return render_template("notification-admin.html")
+
+
+@app.route("/api/admin/emails", methods=["GET", "POST", "DELETE", "PATCH"])
 def api_admin_emails():
     """Manage admin recipient emails (file-backed). Admin only.
     GET: returns recipients list (back-compat: array of strings). Use ?full=1 to get objects with prefs.
@@ -1805,97 +2128,151 @@ def api_admin_emails():
     PATCH: body { email: str, prefs: {failed?:bool, passed?:bool, non_compliant?:bool} }
     DELETE: body { remove: string|string[] }
     """
-    if not session.get('admin_authenticated'):
+    if not session.get("admin_authenticated"):
         return jsonify({"error": "Authentication required"}), 401
     if not NOTIFICATIONS_ENABLED:
         return jsonify({"error": "Notification service not available"}), 400
     try:
-        if request.method == 'GET':
-            full = request.args.get('full') in ('1','true','yes')
+        if request.method == "GET":
+            full = request.args.get("full") in ("1", "true", "yes")
             if full:
-                return jsonify({"success": True, "recipients": notification_service.admin_recipients})
+                return jsonify(
+                    {
+                        "success": True,
+                        "recipients": notification_service.admin_recipients,
+                    }
+                )
             # Back-compat: return plain emails list
-            return jsonify({"success": True, "emails": notification_service.admin_emails})
+            return jsonify(
+                {"success": True, "emails": notification_service.admin_emails}
+            )
         payload = request.get_json(silent=True) or {}
-        if request.method == 'POST':
-            if 'replace' in payload:
-                ok = notification_service.replace_admin_emails(payload.get('replace') or [])
+        if request.method == "POST":
+            if "replace" in payload:
+                ok = notification_service.replace_admin_emails(
+                    payload.get("replace") or []
+                )
             else:
-                add_vals = payload.get('add')
-                add_list = add_vals if isinstance(add_vals, list) else [add_vals] if add_vals else []
+                add_vals = payload.get("add")
+                add_list = (
+                    add_vals
+                    if isinstance(add_vals, list)
+                    else [add_vals]
+                    if add_vals
+                    else []
+                )
                 ok = notification_service.add_admin_emails(add_list)
-            return jsonify({"success": bool(ok), "recipients": notification_service.admin_recipients, "emails": notification_service.admin_emails})
-        if request.method == 'PATCH':
-            email = str((payload.get('email') or '')).strip()
-            prefs = payload.get('prefs') or {}
+            return jsonify(
+                {
+                    "success": bool(ok),
+                    "recipients": notification_service.admin_recipients,
+                    "emails": notification_service.admin_emails,
+                }
+            )
+        if request.method == "PATCH":
+            email = str((payload.get("email") or "")).strip()
+            prefs = payload.get("prefs") or {}
             if not email:
                 return jsonify({"success": False, "error": "Missing email"}), 400
             # Only pass keys that were actually provided to avoid wiping others
             changes = {}
-            for k in ('failed','passed','non_compliant'):
+            for k in ("failed", "passed", "non_compliant"):
                 if k in prefs:
                     changes[k] = prefs[k]
             ok = notification_service.update_admin_email_prefs(email, changes)
-            return jsonify({"success": bool(ok), "recipients": notification_service.admin_recipients, "emails": notification_service.admin_emails})
-        if request.method == 'DELETE':
-            rem_vals = payload.get('remove')
-            rem_list = rem_vals if isinstance(rem_vals, list) else [rem_vals] if rem_vals else []
+            return jsonify(
+                {
+                    "success": bool(ok),
+                    "recipients": notification_service.admin_recipients,
+                    "emails": notification_service.admin_emails,
+                }
+            )
+        if request.method == "DELETE":
+            rem_vals = payload.get("remove")
+            rem_list = (
+                rem_vals
+                if isinstance(rem_vals, list)
+                else [rem_vals]
+                if rem_vals
+                else []
+            )
             ok = notification_service.remove_admin_emails(rem_list)
-            return jsonify({"success": bool(ok), "recipients": notification_service.admin_recipients, "emails": notification_service.admin_emails})
+            return jsonify(
+                {
+                    "success": bool(ok),
+                    "recipients": notification_service.admin_recipients,
+                    "emails": notification_service.admin_emails,
+                }
+            )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/api/admin/members')
+
+@app.route("/api/admin/members")
 def api_admin_members():
     """Return current members with their existing override flags. Admin only."""
-    if not session.get('admin_authenticated'):
+    if not session.get("admin_authenticated"):
         return jsonify({"error": "Authentication required"}), 401
     try:
         file_path, date_str, _ = get_latest_csv_file()
         if not file_path:
-            return jsonify({"success": False, "error": "No data file available", "members": []}), 404
+            return jsonify(
+                {"success": False, "error": "No data file available", "members": []}
+            ), 404
         df = pd.read_csv(file_path)
         df.columns = df.columns.str.strip()
         df = df.rename(columns={"name": "Member", "points": "Points"})
-        if 'Member' not in df.columns:
+        if "Member" not in df.columns:
             return jsonify({"success": False, "error": "Missing Member column"}), 400
         overrides = load_probation_overrides()
-        names = sorted([str(n) for n in df['Member'].dropna().unique().tolist()])
+        names = sorted([str(n) for n in df["Member"].dropna().unique().tolist()])
         members = []
         for n in names:
             o = overrides.get(n, {}) if isinstance(overrides, dict) else {}
-            members.append({
-                'name': n,
-                'overrides': {
-                    'week_1': (o.get('week_1') if 'week_1' in o else None),
-                    'month_1': (o.get('month_1') if 'month_1' in o else None),
-                    'month_3': (o.get('month_3') if 'month_3' in o else None),
+            members.append(
+                {
+                    "name": n,
+                    "overrides": {
+                        "week_1": (o.get("week_1") if "week_1" in o else None),
+                        "month_1": (o.get("month_1") if "month_1" in o else None),
+                        "month_3": (o.get("month_3") if "month_3" in o else None),
+                    },
                 }
-            })
-        return jsonify({"success": True, "members": members, "count": len(members), "latest_date": date_str})
+            )
+        return jsonify(
+            {
+                "success": True,
+                "members": members,
+                "count": len(members),
+                "latest_date": date_str,
+            }
+        )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/api/overrides', methods=['GET', 'POST'])
+
+@app.route("/api/overrides", methods=["GET", "POST"])
 def api_overrides():
     """Get or update probation overrides. Admin only.
     GET -> { overrides: { member: {week_1, month_1, month_3} } }
     POST body: { member: str, overrides: {week_1?: bool, month_1?: bool, month_3?: bool}, remove?: bool }
     - If remove = true OR no truthy flags provided, the member entry is deleted.
     """
-    if not session.get('admin_authenticated'):
+    if not session.get("admin_authenticated"):
         return jsonify({"error": "Authentication required"}), 401
     try:
-        if request.method == 'GET':
-            return jsonify({"success": True, "overrides": load_probation_overrides() or {}})
+        if request.method == "GET":
+            return jsonify(
+                {"success": True, "overrides": load_probation_overrides() or {}}
+            )
 
         payload = request.get_json(silent=True) or {}
-        member = str(payload.get('member', '')).strip()
+        member = str(payload.get("member", "")).strip()
         if not member:
             return jsonify({"success": False, "error": "Missing 'member'"}), 400
 
-        remove = bool(payload.get('remove'))
-        incoming = payload.get('overrides') or {}
+        remove = bool(payload.get("remove"))
+        incoming = payload.get("overrides") or {}
 
         data = load_probation_overrides() or {}
         if remove:
@@ -1905,7 +2282,7 @@ def api_overrides():
             # Start from existing per-member overrides (dict of provided keys only)
             per = data.get(member, {}) if isinstance(data.get(member, {}), dict) else {}
             # Apply tri-state updates: True/False to set, None to clear key
-            for key in ('week_1', 'month_1', 'month_3'):
+            for key in ("week_1", "month_1", "month_3"):
                 if key in incoming:
                     val = incoming.get(key)
                     if val is True or val is False:
@@ -1925,51 +2302,57 @@ def api_overrides():
 
         # Build a stable tri-state response for the member (include missing keys as null)
         per = data.get(member, {}) if member in data else {}
+
         def tri(o, k):
-            return (o.get(k) if k in o else None)
-        return jsonify({
-            "success": True,
-            "overrides": {
-                'week_1': tri(per, 'week_1'),
-                'month_1': tri(per, 'month_1'),
-                'month_3': tri(per, 'month_3'),
+            return o.get(k) if k in o else None
+
+        return jsonify(
+            {
+                "success": True,
+                "overrides": {
+                    "week_1": tri(per, "week_1"),
+                    "month_1": tri(per, "month_1"),
+                    "month_3": tri(per, "month_3"),
+                },
             }
-        })
+        )
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/admin_login', methods=['GET', 'POST'])
+
+@app.route("/admin_login", methods=["GET", "POST"])
 def admin_login():
     """Admin login page"""
-    if request.method == 'POST':
-        password = request.form.get('password')
+    if request.method == "POST":
+        password = request.form.get("password")
         if password == ADMIN_PASSWORD:
-            session['admin_authenticated'] = True
-            return redirect(url_for('notification_admin'))
+            session["admin_authenticated"] = True
+            return redirect(url_for("notification_admin"))
         else:
-            return render_template('admin-login.html', error='Invalid password')
-    
-    return render_template('admin-login.html')
+            return render_template("admin-login.html", error="Invalid password")
 
-@app.route('/admin_logout')
+    return render_template("admin-login.html")
+
+
+@app.route("/admin_logout")
 def admin_logout():
     """Admin logout"""
-    session.pop('admin_authenticated', None)
-    return redirect(url_for('admin_login'))
+    session.pop("admin_authenticated", None)
+    return redirect(url_for("admin_login"))
 
-@app.route('/notification_status')
+
+@app.route("/notification_status")
 def notification_status():
     """Get notification system status and configuration - requires authentication"""
     # Check if user is authenticated
-    if not session.get('admin_authenticated'):
+    if not session.get("admin_authenticated"):
         return jsonify({"error": "Authentication required"}), 401
-    
+
     if not NOTIFICATIONS_ENABLED:
-        return jsonify({
-            "enabled": False,
-            "error": "Notification service not available"
-        })
-    
+        return jsonify(
+            {"enabled": False, "error": "Notification service not available"}
+        )
+
     try:
         config_status = {
             "enabled": True,
@@ -1978,50 +2361,52 @@ def notification_status():
             "sender_email": notification_service.sender_email or "Not configured",
             "sender_configured": bool(notification_service.sender_email),
             "admin_emails_configured": len(notification_service.admin_emails),
-            "admin_emails": notification_service.admin_emails if notification_service.admin_emails else [],
+            "admin_emails": notification_service.admin_emails
+            if notification_service.admin_emails
+            else [],
             "admin_recipients": notification_service.admin_recipients,
-            "notification_history_count": len(notification_service.notification_history)
+            "notification_history_count": len(
+                notification_service.notification_history
+            ),
         }
         return jsonify(config_status)
     except Exception as e:
-        return jsonify({
-            "enabled": False,
-            "error": str(e)
-        })
+        return jsonify({"enabled": False, "error": str(e)})
 
-@app.route('/api/file_count')
+
+@app.route("/api/file_count")
 def get_file_count():
     """Get count of CSV files available in the specified date range"""
     try:
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+
         if not start_date or not end_date:
             return jsonify({"error": "Both start_date and end_date are required"}), 400
-        
+
         # Parse dates
         try:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             end_dt = datetime.strptime(end_date, "%Y-%m-%d")
         except ValueError:
             return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
-        
+
         if start_dt > end_dt:
             return jsonify({"error": "Start date cannot be after end date"}), 400
-        
+
         # Check if the data folder exists
         if not os.path.exists(DATA_FOLDER):
             return jsonify({"error": "Data folder not found"}), 404
-        
+
         # Get all CSV files in the data folder
         csv_files = glob.glob(os.path.join(DATA_FOLDER, "*.csv"))
-        
+
         # Filter files based on date range
         filtered_files = []
         for csv_file in csv_files:
             filename = os.path.basename(csv_file)
             # Extract date from filename (format: sheepit_team_points_YYYY-MM-DD.csv)
-            date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+            date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
             if date_match:
                 file_date_str = date_match.group(1)
                 try:
@@ -2030,46 +2415,46 @@ def get_file_count():
                         filtered_files.append(csv_file)
                 except ValueError:
                     continue
-        
-        return jsonify({
-            "file_count": len(filtered_files),
-            "total_files": len(csv_files)
-        })
-        
+
+        return jsonify(
+            {"file_count": len(filtered_files), "total_files": len(csv_files)}
+        )
+
     except Exception as e:
         print(f"Error getting file count: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/download_csv_files')
+
+@app.route("/download_csv_files")
 def download_csv_files():
     """Download CSV files from the Scraped_Team_Info folder as a ZIP archive with optional date filtering"""
     try:
         # Get date range parameters
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+
         # Check if the data folder exists
         if not os.path.exists(DATA_FOLDER):
             return jsonify({"error": "Data folder not found"}), 404
-        
+
         # Get all CSV files in the data folder
         csv_files = glob.glob(os.path.join(DATA_FOLDER, "*.csv"))
-        
+
         if not csv_files:
             return jsonify({"error": "No CSV files found in data folder"}), 404
-        
+
         # Filter files based on date range if provided
         filtered_files = csv_files
         if start_date and end_date:
             try:
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-                
+
                 filtered_files = []
                 for csv_file in csv_files:
                     filename = os.path.basename(csv_file)
                     # Extract date from filename (format: sheepit_team_points_YYYY-MM-DD.csv)
-                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+                    date_match = re.search(r"(\d{4}-\d{2}-\d{2})", filename)
                     if date_match:
                         file_date_str = date_match.group(1)
                         try:
@@ -2078,53 +2463,59 @@ def download_csv_files():
                                 filtered_files.append(csv_file)
                         except ValueError:
                             continue
-                
+
                 if not filtered_files:
-                    return jsonify({"error": "No CSV files found in the specified date range"}), 404
-                    
+                    return jsonify(
+                        {"error": "No CSV files found in the specified date range"}
+                    ), 404
+
             except ValueError:
                 return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
-        
+
         # Create a ZIP file in memory
         memory_file = io.BytesIO()
-        
-        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+
+        with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as zf:
             for csv_file in filtered_files:
                 # Get just the filename (not the full path)
                 filename = os.path.basename(csv_file)
                 # Add file to ZIP
                 zf.write(csv_file, filename)
-        
+
         memory_file.seek(0)
-        
+
         # Generate filename based on date range or timestamp
         if start_date and end_date:
-            start_formatted = start_date.replace('-', '')
-            end_formatted = end_date.replace('-', '')
+            start_formatted = start_date.replace("-", "")
+            end_formatted = end_date.replace("-", "")
             zip_filename = f"IBU_Team_Data_{start_formatted}_to_{end_formatted}.zip"
         else:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             zip_filename = f"IBU_Team_Data_{timestamp}.zip"
-        
+
         return send_file(
             memory_file,
             as_attachment=True,
             download_name=zip_filename,
-            mimetype='application/zip'
+            mimetype="application/zip",
         )
-        
+
     except Exception as e:
         print(f"Error creating CSV download: {str(e)}")
         return jsonify({"error": f"Failed to create download: {str(e)}"}), 500
 
-@app.route('/trends')
+
+@app.route("/trends")
 def trends():
     """Render the trends analysis page with consistent header metadata"""
     latest_file, latest_date_str, file_timestamp = get_latest_csv_file()
     time_ago = get_time_ago_string(file_timestamp) if file_timestamp else "Recently"
-    return render_template('trends.html', time_ago=time_ago, latest_date=latest_date_str or "-")
+    return render_template(
+        "trends.html", time_ago=time_ago, latest_date=latest_date_str or "-"
+    )
 
-@app.route('/api/trends/members')
+
+@app.route("/api/trends/members")
 def api_trends_members():
     """Return available members (from most recent CSV), earliest & latest dates."""
     try:
@@ -2136,130 +2527,153 @@ def api_trends_members():
         file_infos = []
         for p in file_paths:
             fname = os.path.basename(p)
-            m = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+            m = re.search(r"(\d{4}-\d{2}-\d{2})", fname)
             if not m:
                 continue
             try:
-                parsed_date = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+                parsed_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
             except ValueError:
                 continue
-            file_infos.append({'path': p, 'filename': fname, 'parsed_date': parsed_date})
+            file_infos.append(
+                {"path": p, "filename": fname, "parsed_date": parsed_date}
+            )
 
         if not file_infos:
-            return jsonify({"success": False, "error": "No parsable CSV filenames"}), 404
+            return jsonify(
+                {"success": False, "error": "No parsable CSV filenames"}
+            ), 404
 
         # Latest file by date
-        latest_info = max(file_infos, key=lambda x: x['parsed_date'])
-        earliest_info = min(file_infos, key=lambda x: x['parsed_date'])
+        latest_info = max(file_infos, key=lambda x: x["parsed_date"])
+        earliest_info = min(file_infos, key=lambda x: x["parsed_date"])
 
-        df = pd.read_csv(latest_info['path'])
+        df = pd.read_csv(latest_info["path"])
         df = normalize_member_points_columns(df)
 
         members = []
         for _, row in df.iterrows():
-            member_name = row.get('Member', '') or row.get('Name', '')
+            member_name = row.get("Member", "") or row.get("Name", "")
             if not member_name:
                 continue
-            points_val = row.get('Points', 0)
+            points_val = row.get("Points", 0)
             try:
                 points_int = int(points_val) if pd.notna(points_val) else 0
             except Exception:
                 points_int = 0
-            members.append({
-                'name': str(member_name),
-                'current_points': points_int
-            })
+            members.append({"name": str(member_name), "current_points": points_int})
 
-        members.sort(key=lambda x: x['current_points'], reverse=True)
+        members.sort(key=lambda x: x["current_points"], reverse=True)
 
-        return jsonify({
-            "success": True,
-            "members": members,
-            "latest_date": latest_info['parsed_date'].strftime('%Y-%m-%d'),
-            "earliest_date": earliest_info['parsed_date'].strftime('%Y-%m-%d'),
-            "member_count": len(members)
-        })
+        return jsonify(
+            {
+                "success": True,
+                "members": members,
+                "latest_date": latest_info["parsed_date"].strftime("%Y-%m-%d"),
+                "earliest_date": earliest_info["parsed_date"].strftime("%Y-%m-%d"),
+                "member_count": len(members),
+            }
+        )
     except Exception as e:
         print(f"Error getting members list: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/api/trends/teams')
+
+@app.route("/api/trends/teams")
 def api_trends_teams():
     """Return available teams (from most recent rankings CSV) with current metrics."""
     try:
         files = get_team_points_files_from_folder()
         if not files:
-            return jsonify({"success": False, "error": "No team rankings files found"}), 404
+            return jsonify(
+                {"success": False, "error": "No team rankings files found"}
+            ), 404
         file_infos = []
         for p in files:
             fname = os.path.basename(p)
-            m = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+            m = re.search(r"(\d{4}-\d{2}-\d{2})", fname)
             if not m:
                 continue
             try:
-                parsed_date = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+                parsed_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
             except ValueError:
                 continue
-            file_infos.append({'path': p, 'filename': fname, 'parsed_date': parsed_date})
+            file_infos.append(
+                {"path": p, "filename": fname, "parsed_date": parsed_date}
+            )
         if not file_infos:
-            return jsonify({"success": False, "error": "No parsable rankings filenames"}), 404
-        latest = max(file_infos, key=lambda x: x['parsed_date'])
-        earliest = min(file_infos, key=lambda x: x['parsed_date'])
-        df = pd.read_csv(latest['path'])
+            return jsonify(
+                {"success": False, "error": "No parsable rankings filenames"}
+            ), 404
+        latest = max(file_infos, key=lambda x: x["parsed_date"])
+        earliest = min(file_infos, key=lambda x: x["parsed_date"])
+        df = pd.read_csv(latest["path"])
         teams = []
         for _, row in df.iterrows():
-            name = str(row.get('Name', '')).strip()
+            name = str(row.get("Name", "")).strip()
             if not name:
                 continue
+
             def _get_int(col):
                 try:
                     return int(row.get(col, 0)) if pd.notna(row.get(col, 0)) else 0
                 except Exception:
                     return 0
-            teams.append({
-                'name': name,
-                'total_points': _get_int('total_points'),
-                'members': _get_int('members'),
-                '90_days': _get_int('90_days'),
-                '180_days': _get_int('180_days')
-            })
-        teams.sort(key=lambda x: x['total_points'], reverse=True)
-        return jsonify({
-            'success': True,
-            'teams': teams,
-            'latest_date': latest['parsed_date'].strftime('%Y-%m-%d'),
-            'earliest_date': earliest['parsed_date'].strftime('%Y-%m-%d'),
-            'team_count': len(teams)
-        })
+
+            teams.append(
+                {
+                    "name": name,
+                    "total_points": _get_int("total_points"),
+                    "members": _get_int("members"),
+                    "90_days": _get_int("90_days"),
+                    "180_days": _get_int("180_days"),
+                }
+            )
+        teams.sort(key=lambda x: x["total_points"], reverse=True)
+        return jsonify(
+            {
+                "success": True,
+                "teams": teams,
+                "latest_date": latest["parsed_date"].strftime("%Y-%m-%d"),
+                "earliest_date": earliest["parsed_date"].strftime("%Y-%m-%d"),
+                "team_count": len(teams),
+            }
+        )
     except Exception as e:
         print(f"Error getting teams list: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/api/trends/data')
+
+@app.route("/api/trends/data")
 def api_trends_data():
     """Return trend time-series data, with optional aggregation & predictions."""
     # Parse requested series (comma separated in 'series' param)
-    series_param = request.args.get('series', '')
-    series_list = [s.strip() for s in series_param.split(',') if s.strip()]
+    series_param = request.args.get("series", "")
+    series_list = [s.strip() for s in series_param.split(",") if s.strip()]
 
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    chart_type = request.args.get('chart_type', 'line')
-    time_period = request.args.get('time_period', 'daily')
-    predictions_enabled = request.args.get('predictions', 'false').lower() == 'true'
-    prediction_method = request.args.get('prediction_method', 'linear')
-    prediction_days = int(request.args.get('prediction_days', '30'))
-    value_mode = request.args.get('value_mode', 'cumulative')  # 'cumulative' or 'interval'
-    fill_lines = request.args.get('fill_lines', 'true').lower() == 'true'
-    team_metric = request.args.get('team_metric', 'total_points')  # total_points|members|90_days|180_days
-    hide_first_interval = request.args.get('hide_first_interval', 'false').lower() == 'true'
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    chart_type = request.args.get("chart_type", "line")
+    time_period = request.args.get("time_period", "daily")
+    predictions_enabled = request.args.get("predictions", "false").lower() == "true"
+    prediction_method = request.args.get("prediction_method", "linear")
+    prediction_days = int(request.args.get("prediction_days", "30"))
+    value_mode = request.args.get(
+        "value_mode", "cumulative"
+    )  # 'cumulative' or 'interval'
+    fill_lines = request.args.get("fill_lines", "true").lower() == "true"
+    team_metric = request.args.get(
+        "team_metric", "total_points"
+    )  # total_points|members|90_days|180_days
+    hide_first_interval = (
+        request.args.get("hide_first_interval", "false").lower() == "true"
+    )
     hide_first_interval = True
     original_series_list = list(series_list)
     # Separate team series (prefixed with team:) from member series
     team_series_requested = []
     member_series = []
     for s in series_list:
-        if s.lower().startswith('team:'):
+        if s.lower().startswith("team:"):
             team_series_requested.append(s[5:].strip())
         else:
             member_series.append(s)
@@ -2273,14 +2687,14 @@ def api_trends_data():
     file_infos = []
     for p in file_paths:
         fname = os.path.basename(p)
-        m = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+        m = re.search(r"(\d{4}-\d{2}-\d{2})", fname)
         if not m:
             continue
         try:
-            parsed_date = datetime.strptime(m.group(1), '%Y-%m-%d').date()
+            parsed_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
         except ValueError:
             continue
-        file_infos.append({'path': p, 'filename': fname, 'parsed_date': parsed_date})
+        file_infos.append({"path": p, "filename": fname, "parsed_date": parsed_date})
 
     if not file_infos:
         return jsonify({"success": False, "error": "No parsable data files"}), 404
@@ -2288,54 +2702,62 @@ def api_trends_data():
     # Date filtering
     if start_date:
         try:
-            start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
-            file_infos = [f for f in file_infos if f['parsed_date'] >= start_dt]
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+            file_infos = [f for f in file_infos if f["parsed_date"] >= start_dt]
         except ValueError:
             return jsonify({"success": False, "error": "Invalid start_date"}), 400
     if end_date:
         try:
-            end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
-            file_infos = [f for f in file_infos if f['parsed_date'] <= end_dt]
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+            file_infos = [f for f in file_infos if f["parsed_date"] <= end_dt]
         except ValueError:
             return jsonify({"success": False, "error": "Invalid end_date"}), 400
 
     if not file_infos:
         return jsonify({"success": False, "error": "No files in selected range"}), 404
 
-    file_infos.sort(key=lambda x: x['parsed_date'])
+    file_infos.sort(key=lambda x: x["parsed_date"])
 
     # Collect daily data
-    daily_data = {name: {'dates': [], 'points': [], 'daily_change': [], 'rank': []} for name in series_list if name != 'total'}
+    daily_data = {
+        name: {"dates": [], "points": [], "daily_change": [], "rank": []}
+        for name in series_list
+        if name != "total"
+    }
     # 'total' handled separately
-    total_series_needed = 'total' in series_list
-    total_data = {'dates': [], 'points': [], 'daily_change': []} if total_series_needed else None
+    total_series_needed = "total" in series_list
+    total_data = (
+        {"dates": [], "points": [], "daily_change": []} if total_series_needed else None
+    )
 
     last_points_tracker = {name: None for name in daily_data.keys()}
     last_total_points = None
 
     for info in file_infos:
         try:
-                df = pd.read_csv(info['path'])
-                df = normalize_member_points_columns(df)
+            df = pd.read_csv(info["path"])
+            df = normalize_member_points_columns(df)
         except Exception as e:
             print(f"Failed reading {info['path']}: {e}")
             continue
-        date_label = info['parsed_date'].strftime('%Y-%m-%d')
+        date_label = info["parsed_date"].strftime("%Y-%m-%d")
 
         # Total points (sum Points column) if needed
         if total_series_needed:
             total_points_value = 0
-            if 'Points' in df.columns:
+            if "Points" in df.columns:
                 try:
-                    total_points_value = int(df['Points'].fillna(0).astype(int).sum())
+                    total_points_value = int(df["Points"].fillna(0).astype(int).sum())
                 except Exception:
-                    total_points_value = int(df['Points'].fillna(0).sum())
-            total_data['dates'].append(date_label)
-            total_data['points'].append(total_points_value)
+                    total_points_value = int(df["Points"].fillna(0).sum())
+            total_data["dates"].append(date_label)
+            total_data["points"].append(total_points_value)
             if last_total_points is not None:
-                total_data['daily_change'].append(total_points_value - last_total_points)
+                total_data["daily_change"].append(
+                    total_points_value - last_total_points
+                )
             else:
-                total_data['daily_change'].append(0)
+                total_data["daily_change"].append(0)
             last_total_points = total_points_value
 
         # Individual members
@@ -2343,7 +2765,7 @@ def api_trends_data():
             # Find row
             member_row = None
             for _, row in df.iterrows():
-                row_name = row.get('Name', str(row.get('Member', '')))
+                row_name = row.get("Name", str(row.get("Member", "")))
                 row_name = str(row_name).strip()
                 if row_name == member_name:
                     member_row = row
@@ -2352,34 +2774,46 @@ def api_trends_data():
             rank_val = 0
             if member_row is not None:
                 try:
-                    points_val = int(member_row.get('Points', 0)) if pd.notna(member_row.get('Points', 0)) else 0
+                    points_val = (
+                        int(member_row.get("Points", 0))
+                        if pd.notna(member_row.get("Points", 0))
+                        else 0
+                    )
                 except Exception:
                     points_val = 0
                 try:
-                    rank_val = int(member_row.get('Rank', 0)) if pd.notna(member_row.get('Rank', 0)) else 0
+                    rank_val = (
+                        int(member_row.get("Rank", 0))
+                        if pd.notna(member_row.get("Rank", 0))
+                        else 0
+                    )
                 except Exception:
                     rank_val = 0
             # Append
             daily_member = daily_data[member_name]
-            daily_member['dates'].append(date_label)
-            daily_member['points'].append(points_val)
-            daily_member['rank'].append(rank_val)
+            daily_member["dates"].append(date_label)
+            daily_member["points"].append(points_val)
+            daily_member["rank"].append(rank_val)
             if last_points_tracker[member_name] is not None:
-                daily_member['daily_change'].append(points_val - last_points_tracker[member_name])
+                daily_member["daily_change"].append(
+                    points_val - last_points_tracker[member_name]
+                )
             else:
-                daily_member['daily_change'].append(0)
+                daily_member["daily_change"].append(0)
             last_points_tracker[member_name] = points_val
 
     # Combine into trends_data structure
 
     trends_data = {}
     if total_series_needed:
-        trends_data['Total Team Points'] = {  # Display label different from param 'total'
-            'dates': total_data['dates'],
-            'points': total_data['points'],
-            'daily_change': total_data['daily_change'],
+        trends_data[
+            "Total Team Points"
+        ] = {  # Display label different from param 'total'
+            "dates": total_data["dates"],
+            "points": total_data["points"],
+            "daily_change": total_data["daily_change"],
             # Provide rank list of zeros so aggregation logic doesn't index error
-            'rank': [0]*len(total_data['dates'])
+            "rank": [0] * len(total_data["dates"]),
         }
     for k, v in daily_data.items():
         trends_data[k] = v
@@ -2391,143 +2825,166 @@ def api_trends_data():
             team_file_infos = []
             for p in team_files:
                 fname = os.path.basename(p)
-                m2 = re.search(r'(\d{4}-\d{2}-\d{2})', fname)
+                m2 = re.search(r"(\d{4}-\d{2}-\d{2})", fname)
                 if not m2:
                     continue
                 try:
-                    parsed_date = datetime.strptime(m2.group(1), '%Y-%m-%d').date()
+                    parsed_date = datetime.strptime(m2.group(1), "%Y-%m-%d").date()
                 except ValueError:
                     continue
                 # Respect date filters
                 if start_date:
                     try:
-                        sd = datetime.strptime(start_date, '%Y-%m-%d').date()
+                        sd = datetime.strptime(start_date, "%Y-%m-%d").date()
                         if parsed_date < sd:
                             continue
                     except Exception:
                         pass
                 if end_date:
                     try:
-                        ed = datetime.strptime(end_date, '%Y-%m-%d').date()
+                        ed = datetime.strptime(end_date, "%Y-%m-%d").date()
                         if parsed_date > ed:
                             continue
                     except Exception:
                         pass
-                team_file_infos.append({'path': p, 'parsed_date': parsed_date})
-            team_file_infos.sort(key=lambda x: x['parsed_date'])
-            team_data_struct = {t: {'dates': [], 'points': [], 'daily_change': [], 'rank': []} for t in team_series_requested}
+                team_file_infos.append({"path": p, "parsed_date": parsed_date})
+            team_file_infos.sort(key=lambda x: x["parsed_date"])
+            team_data_struct = {
+                t: {"dates": [], "points": [], "daily_change": [], "rank": []}
+                for t in team_series_requested
+            }
             last_vals = {t: None for t in team_series_requested}
             for info in team_file_infos:
                 try:
-                    df_team = pd.read_csv(info['path'])
+                    df_team = pd.read_csv(info["path"])
                 except Exception as e:
                     print(f"Failed reading team rankings {info['path']}: {e}")
                     continue
-                date_label = info['parsed_date'].strftime('%Y-%m-%d')
+                date_label = info["parsed_date"].strftime("%Y-%m-%d")
                 # Build normalized name map once per file for robust matching
                 try:
-                    df_team['_norm_name'] = df_team['Name'].astype(str).str.strip().str.lower()
+                    df_team["_norm_name"] = (
+                        df_team["Name"].astype(str).str.strip().str.lower()
+                    )
                 except Exception:
-                    df_team['_norm_name'] = ''
+                    df_team["_norm_name"] = ""
                 # Pre-compute sanitized names
                 try:
-                    df_team['_san_name'] = df_team['Name'].apply(_sanitize_team_name)
+                    df_team["_san_name"] = df_team["Name"].apply(_sanitize_team_name)
                 except Exception:
-                    df_team['_san_name'] = df_team['_norm_name']
+                    df_team["_san_name"] = df_team["_norm_name"]
                 debug_team_matching = []
                 for tname in team_series_requested:
                     target_norm = tname.strip().lower()
                     target_san = _sanitize_team_name(tname)
                     # 1. Exact norm
-                    row = df_team[df_team['_norm_name'] == target_norm]
+                    row = df_team[df_team["_norm_name"] == target_norm]
                     # 2. Exact sanitized
                     if row.empty:
-                        row = df_team[df_team['_san_name'] == target_san]
+                        row = df_team[df_team["_san_name"] == target_san]
                     # 3. Startswith norm (first 12 chars)
                     if row.empty:
-                        cand = df_team[df_team['_norm_name'].str.startswith(target_norm[:12])]
+                        cand = df_team[
+                            df_team["_norm_name"].str.startswith(target_norm[:12])
+                        ]
                         if len(cand) == 1:
                             row = cand
                     # 4. Startswith sanitized (first 12 chars)
                     if row.empty:
-                        cand2 = df_team[df_team['_san_name'].str.startswith(target_san[:12])]
+                        cand2 = df_team[
+                            df_team["_san_name"].str.startswith(target_san[:12])
+                        ]
                         if len(cand2) == 1:
                             row = cand2
                     # 5. Contains sanitized token (rare fallback) - pick first smallest rank
                     if row.empty and target_san:
-                        subset = df_team[df_team['_san_name'].str.contains(target_san.split(' ')[0], na=False)]
+                        subset = df_team[
+                            df_team["_san_name"].str.contains(
+                                target_san.split(" ")[0], na=False
+                            )
+                        ]
                         if len(subset) == 1:
                             row = subset
                         elif len(subset) > 1:
                             # choose row with minimal rank value if available
                             try:
                                 subset_numeric = subset.copy()
-                                subset_numeric['__rk'] = pd.to_numeric(subset_numeric.get('Rank'), errors='coerce').fillna(999999)
-                                row = subset_numeric.sort_values('__rk').head(1)
+                                subset_numeric["__rk"] = pd.to_numeric(
+                                    subset_numeric.get("Rank"), errors="coerce"
+                                ).fillna(999999)
+                                row = subset_numeric.sort_values("__rk").head(1)
                             except Exception:
                                 row = subset.head(1)
                     if row.empty:
-                        debug_team_matching.append({
-                            'requested': tname,
-                            'target_norm': target_norm,
-                            'target_san': target_san,
-                            'status': 'not_found'
-                        })
+                        debug_team_matching.append(
+                            {
+                                "requested": tname,
+                                "target_norm": target_norm,
+                                "target_san": target_san,
+                                "status": "not_found",
+                            }
+                        )
                         continue
                     r = row.iloc[0]
+
                     def _metric_value(col):
                         try:
                             return int(r.get(col, 0)) if pd.notna(r.get(col, 0)) else 0
                         except Exception:
                             return 0
-                    if team_metric == 'members':
-                        val = _metric_value('members')
-                    elif team_metric == '90_days':
-                        val = _metric_value('90_days')
-                    elif team_metric == '180_days':
-                        val = _metric_value('180_days')
+
+                    if team_metric == "members":
+                        val = _metric_value("members")
+                    elif team_metric == "90_days":
+                        val = _metric_value("90_days")
+                    elif team_metric == "180_days":
+                        val = _metric_value("180_days")
                     else:
-                        val = _metric_value('total_points')
+                        val = _metric_value("total_points")
                     try:
-                        rk = int(r.get('Rank', 0)) if pd.notna(r.get('Rank', 0)) else 0
+                        rk = int(r.get("Rank", 0)) if pd.notna(r.get("Rank", 0)) else 0
                     except Exception:
                         rk = 0
                     entry = team_data_struct[tname]
-                    entry['dates'].append(date_label)
-                    entry['points'].append(val)
+                    entry["dates"].append(date_label)
+                    entry["points"].append(val)
                     if last_vals[tname] is None:
-                        entry['daily_change'].append(0)
+                        entry["daily_change"].append(0)
                     else:
-                        entry['daily_change'].append(max(0, val - last_vals[tname]))
-                    entry['rank'].append(rk)
+                        entry["daily_change"].append(max(0, val - last_vals[tname]))
+                    entry["rank"].append(rk)
                     last_vals[tname] = val
-                    debug_team_matching.append({
-                        'requested': tname,
-                        'target_norm': target_norm,
-                        'target_san': target_san,
-                        'matched_name': str(r.get('Name')),
-                        'date': date_label,
-                        'value': val,
-                        'rank': rk
-                    })
+                    debug_team_matching.append(
+                        {
+                            "requested": tname,
+                            "target_norm": target_norm,
+                            "target_san": target_san,
+                            "matched_name": str(r.get("Name")),
+                            "date": date_label,
+                            "value": val,
+                            "rank": rk,
+                        }
+                    )
                 if debug_team_matching:
                     # Print once per file to avoid log spam
-                    print(f"[TEAM_MATCH_DEBUG] file={info['path']} entries={debug_team_matching}")
+                    print(
+                        f"[TEAM_MATCH_DEBUG] file={info['path']} entries={debug_team_matching}"
+                    )
             for tname, tdata in team_data_struct.items():
-                if tdata['dates']:
+                if tdata["dates"]:
                     # Prefix to distinguish from member names
                     trends_data[f"Team: {tname}"] = tdata
     # Track which dates originally existed (before gap fill) for interval production distribution
     for series_name, sdata in trends_data.items():
-        sdata['observed_dates'] = set(sdata['dates'])
+        sdata["observed_dates"] = set(sdata["dates"])
 
     # Fill missing daily dates (forward-fill points) to avoid gaps in daily view
-    if time_period == 'daily':
+    if time_period == "daily":
         trends_data = fill_missing_daily_dates(trends_data)
 
     # Snapshot raw daily points & compute raw daily produced (before aggregation & before interval transformation)
     for series_name, sdata in trends_data.items():
-        pts = sdata.get('points', [])
+        pts = sdata.get("points", [])
         daily_prod = []
         prev = None
         for p in pts:
@@ -2536,26 +2993,26 @@ def api_trends_data():
             else:
                 daily_prod.append(max(0, p - prev))
             prev = p
-        sdata['daily_points_raw'] = list(pts)
-        sdata['daily_dates_raw'] = list(sdata.get('dates', []))
-        sdata['daily_produced_raw'] = daily_prod
+        sdata["daily_points_raw"] = list(pts)
+        sdata["daily_dates_raw"] = list(sdata.get("dates", []))
+        sdata["daily_produced_raw"] = daily_prod
 
     # Aggregate if needed
-    if time_period != 'daily':
+    if time_period != "daily":
         trends_data = aggregate_time_period(trends_data, time_period)
 
     # Convert to interval production if requested (replace points with per-period produced)
-    if value_mode == 'interval':
+    if value_mode == "interval":
         for series_name, sdata in trends_data.items():
-            pts = sdata.get('points', [])
-            dates = sdata.get('dates', [])
-            produced = [0]*len(pts)
+            pts = sdata.get("points", [])
+            dates = sdata.get("dates", [])
+            produced = [0] * len(pts)
             if not pts:
-                sdata['produced'] = produced
+                sdata["produced"] = produced
                 continue
             # Daily: distribute delta across gaps between real observations
-            if time_period == 'daily':
-                observed = sdata.get('observed_dates', set())
+            if time_period == "daily":
+                observed = sdata.get("observed_dates", set())
                 last_real_index = None
                 last_real_points = None
                 for idx, (d_str, p_val) in enumerate(zip(dates, pts)):
@@ -2568,7 +3025,11 @@ def api_trends_data():
                             continue
                         # Compute gap span (number of days between observations)
                         gap_days = idx - last_real_index
-                        delta = max(0, p_val - last_real_points) if last_real_points is not None else 0
+                        delta = (
+                            max(0, p_val - last_real_points)
+                            if last_real_points is not None
+                            else 0
+                        )
                         if gap_days <= 0:
                             last_real_index = idx
                             last_real_points = p_val
@@ -2577,13 +3038,15 @@ def api_trends_data():
                         # Example: real at i0=0 and i1=2 (gap_days=2) -> distribute across indices 1 and 2
                         per_day = delta // gap_days if gap_days > 0 else 0
                         remainder = delta - per_day * gap_days
-                        for j in range(1, gap_days+1):
+                        for j in range(1, gap_days + 1):
                             target_index = last_real_index + j
-                            add_val = per_day + (remainder if j == gap_days else 0)  # put remainder on last real day
+                            add_val = per_day + (
+                                remainder if j == gap_days else 0
+                            )  # put remainder on last real day
                             produced[target_index] = add_val
                         last_real_index = idx
                         last_real_points = p_val
-                sdata['produced'] = produced
+                sdata["produced"] = produced
             else:
                 # Aggregated periods: simple difference period-over-period
                 prev = None
@@ -2594,29 +3057,48 @@ def api_trends_data():
                     else:
                         produced[i] = max(0, p - prev)
                     prev = p
-                sdata['produced'] = produced
+                sdata["produced"] = produced
         # produced now holds per-day estimated production (distributed over gaps)
 
         # Optional: remove the first interval point entirely if requested (hide_first_interval=true)
         if hide_first_interval:
             for sname, sdata in trends_data.items():
-                if len(sdata.get('dates', [])) > 1:
-                    for key in ['dates','points','daily_change','rank','produced','daily_points_raw','daily_produced_raw','daily_dates_raw']:
-                        if key in sdata and isinstance(sdata[key], list) and len(sdata[key]) > 1:
+                if len(sdata.get("dates", [])) > 1:
+                    for key in [
+                        "dates",
+                        "points",
+                        "daily_change",
+                        "rank",
+                        "produced",
+                        "daily_points_raw",
+                        "daily_produced_raw",
+                        "daily_dates_raw",
+                    ]:
+                        if (
+                            key in sdata
+                            and isinstance(sdata[key], list)
+                            and len(sdata[key]) > 1
+                        ):
                             sdata[key] = sdata[key][1:]
                     # observed_dates is a set; remove first date if present
-                    if 'observed_dates' in sdata and isinstance(sdata['observed_dates'], set):
+                    if "observed_dates" in sdata and isinstance(
+                        sdata["observed_dates"], set
+                    ):
                         # Determine original first date (after potential slice we don't need it)
                         # Not strictly necessary to adjust, leave as-is or rebuild:
                         pass
 
     # Build traces
-    if chart_type == 'candlestick':
-        traces = prepare_candlestick_data(trends_data, value_mode=value_mode, time_period=time_period)
-    elif chart_type == 'bar':
+    if chart_type == "candlestick":
+        traces = prepare_candlestick_data(
+            trends_data, value_mode=value_mode, time_period=time_period
+        )
+    elif chart_type == "bar":
         traces = prepare_bar_data(trends_data, value_mode=value_mode)
     else:
-        traces = prepare_line_data(trends_data, value_mode=value_mode, fill_enabled=fill_lines)
+        traces = prepare_line_data(
+            trends_data, value_mode=value_mode, fill_enabled=fill_lines
+        )
 
     # Predictions
     if predictions_enabled and prediction_days > 0:
@@ -2625,127 +3107,141 @@ def api_trends_data():
     # Distinct dates count (from any first non-empty series)
     data_points = 0
     for t in traces:
-        if t.get('type') in ('scatter', 'bar') and t.get('x'):
-            data_points = max(data_points, len(t.get('x', [])))
-    
-    y_axis_title = 'Points Produced' if value_mode == 'interval' else 'Points'
+        if t.get("type") in ("scatter", "bar") and t.get("x"):
+            data_points = max(data_points, len(t.get("x", [])))
+
+    y_axis_title = "Points Produced" if value_mode == "interval" else "Points"
     layout = {
-        'title': '',
-        'paper_bgcolor': 'rgba(255,255,255,0.1)',
-        'plot_bgcolor': 'rgba(0,0,0,0)',
-        'xaxis': {
-            'title': 'Date',
-            'gridcolor': 'rgba(255,255,255,0.08)',
-            'showline': False,
-            'zeroline': False,
-            'tickangle': -35,
-            'ticks': 'outside',
-            'tickcolor': 'rgba(255,255,255,0.15)',
-            'ticklen': 6
+        "title": "",
+        "paper_bgcolor": "rgba(255,255,255,0.1)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "xaxis": {
+            "title": "Date",
+            "gridcolor": "rgba(255,255,255,0.08)",
+            "showline": False,
+            "zeroline": False,
+            "tickangle": -35,
+            "ticks": "outside",
+            "tickcolor": "rgba(255,255,255,0.15)",
+            "ticklen": 6,
         },
-            'yaxis': {
-                'title': y_axis_title,
-            'rangemode': 'tozero',
-            'gridcolor': 'rgba(255,255,255,0.08)',
-            'showline': False,
-            'zeroline': False
+        "yaxis": {
+            "title": y_axis_title,
+            "rangemode": "tozero",
+            "gridcolor": "rgba(255,255,255,0.08)",
+            "showline": False,
+            "zeroline": False,
         },
-        'legend': {
-            'orientation': 'h',
-            'bgcolor': 'rgba(0,0,0,0)',
-            'yanchor': 'bottom',
-            'y': 1.02,
-            'x': 0
+        "legend": {
+            "orientation": "h",
+            "bgcolor": "rgba(0,0,0,0)",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "x": 0,
         },
-        'margin': {'l': 60, 'r': 30, 't': 30, 'b': 70},
-        'hovermode': 'x unified',
-        'hoverlabel': {
-            'bgcolor': '#1e2533',
-            'bordercolor': '#3a4558',
-            'font': {'color': '#ffffff'}
+        "margin": {"l": 60, "r": 30, "t": 30, "b": 70},
+        "hovermode": "x unified",
+        "hoverlabel": {
+            "bgcolor": "#1e2533",
+            "bordercolor": "#3a4558",
+            "font": {"color": "#ffffff"},
         },
-        'font': {
-            'family': 'Segoe UI, Inter, Arial',
-            'color': '#f0f2f6',
-            'size': 12
-        },
-        'transition': {'duration': 400, 'easing': 'cubic-in-out'}
+        "font": {"family": "Segoe UI, Inter, Arial", "color": "#f0f2f6", "size": 12},
+        "transition": {"duration": 400, "easing": "cubic-in-out"},
     }
     # Override hovermode for interval candlestick so custom hovertemplate displays instead of default OHLC unified panel
-    if chart_type == 'candlestick' and value_mode == 'interval':
-        layout['hovermode'] = 'closest'
+    if chart_type == "candlestick" and value_mode == "interval":
+        layout["hovermode"] = "closest"
     config = {
-        'displaylogo': False,
-        'responsive': True,
-        'modeBarButtonsToRemove': [
-            'zoom2d','pan2d','select2d','lasso2d','autoScale2d','resetScale2d','toggleSpikelines'
+        "displaylogo": False,
+        "responsive": True,
+        "modeBarButtonsToRemove": [
+            "zoom2d",
+            "pan2d",
+            "select2d",
+            "lasso2d",
+            "autoScale2d",
+            "resetScale2d",
+            "toggleSpikelines",
         ],
-        'toImageButtonOptions': {'format': 'png', 'filename': 'ibu_trends_chart'}
+        "toImageButtonOptions": {"format": "png", "filename": "ibu_trends_chart"},
     }
 
-    return jsonify({
-        'success': True,
-        'data': traces,
-        'layout': layout,
-        'config': config,
-        'data_points': data_points,
-            'metadata': {
-            'chart_type': chart_type,
-            'time_period': time_period,
-                'value_mode': value_mode,
-            'series_requested': original_series_list,
-            'member_series_resolved': series_list,
-            'team_series_requested': team_series_requested,
-            'team_metric': team_metric,
-            'fill_lines': fill_lines,
-            'date_range': {
-                'start': file_infos[0]['parsed_date'].strftime('%Y-%m-%d'),
-                'end': file_infos[-1]['parsed_date'].strftime('%Y-%m-%d')
-            }
+    return jsonify(
+        {
+            "success": True,
+            "data": traces,
+            "layout": layout,
+            "config": config,
+            "data_points": data_points,
+            "metadata": {
+                "chart_type": chart_type,
+                "time_period": time_period,
+                "value_mode": value_mode,
+                "series_requested": original_series_list,
+                "member_series_resolved": series_list,
+                "team_series_requested": team_series_requested,
+                "team_metric": team_metric,
+                "fill_lines": fill_lines,
+                "date_range": {
+                    "start": file_infos[0]["parsed_date"].strftime("%Y-%m-%d"),
+                    "end": file_infos[-1]["parsed_date"].strftime("%Y-%m-%d"),
+                },
+            },
         }
-    })
+    )
+
 
 def add_prediction_traces(traces, method, days):
     """Append prediction traces in-place based on existing line/candlestick traces.
     We only generate predictions for scatter (line) data or candlestick close values."""
     try:
-        future_color_suffix = {'linear': 'dash', 'moving_average': 'dot'}.get(method, 'dash')
+        future_color_suffix = {"linear": "dash", "moving_average": "dot"}.get(
+            method, "dash"
+        )
         for trace in list(traces):  # iterate over a copy
             # Determine y-series
-            if trace.get('type') == 'candlestick':
-                y_series = trace.get('close', [])
+            if trace.get("type") == "candlestick":
+                y_series = trace.get("close", [])
             else:
-                y_series = trace.get('y', [])
-            x_series = trace.get('x', [])
+                y_series = trace.get("y", [])
+            x_series = trace.get("x", [])
             if len(y_series) < 3:
                 continue  # not enough data
             # Build numeric x as day indices
-            base_dates = [datetime.strptime(d, '%Y-%m-%d') for d in x_series]
+            base_dates = [datetime.strptime(d, "%Y-%m-%d") for d in x_series]
             start_date = base_dates[0]
             x_numeric = [(d - start_date).days for d in base_dates]
 
-            if method == 'linear':
+            if method == "linear":
                 # Simple linear regression
                 n = len(x_numeric)
                 sum_x = sum(x_numeric)
                 sum_y = sum(y_series)
-                sum_xx = sum(x*x for x in x_numeric)
-                sum_xy = sum(x*y for x, y in zip(x_numeric, y_series))
-                denom = (n * sum_xx - sum_x * sum_x)
+                sum_xx = sum(x * x for x in x_numeric)
+                sum_xy = sum(x * y for x, y in zip(x_numeric, y_series))
+                denom = n * sum_xx - sum_x * sum_x
                 if denom == 0:
                     continue
                 slope = (n * sum_xy - sum_x * sum_y) / denom
                 intercept = (sum_y - slope * sum_x) / n
+
                 def predict(x):
                     return intercept + slope * x
+
                 # Use last trend continuation
             else:  # moving_average
-                window = 5 if len(y_series) >= 5 else max(2, len(y_series)//2)
+                window = 5 if len(y_series) >= 5 else max(2, len(y_series) // 2)
                 avg_changes = []
                 for i in range(1, len(y_series)):
-                    avg_changes.append(y_series[i] - y_series[i-1])
+                    avg_changes.append(y_series[i] - y_series[i - 1])
                 # average of last window changes
-                recent_change = sum(avg_changes[-window:]) / len(avg_changes[-window:]) if avg_changes else 0
+                recent_change = (
+                    sum(avg_changes[-window:]) / len(avg_changes[-window:])
+                    if avg_changes
+                    else 0
+                )
+
                 def predict(x):
                     # x here is absolute day index relative to start_date
                     last_index = x_numeric[-1]
@@ -2756,9 +3252,9 @@ def add_prediction_traces(traces, method, days):
             future_values = []
             last_index = x_numeric[-1]
             last_date = base_dates[-1]
-            for i in range(1, days+1):
+            for i in range(1, days + 1):
                 future_date = last_date + timedelta(days=i)
-                future_dates.append(future_date.strftime('%Y-%m-%d'))
+                future_dates.append(future_date.strftime("%Y-%m-%d"))
                 # Clamp predictions at zero to avoid negative values
                 y_pred = predict(last_index + i)
                 if y_pred < 0:
@@ -2766,22 +3262,23 @@ def add_prediction_traces(traces, method, days):
                 future_values.append(y_pred)
 
             pred_trace = {
-                'name': f"{trace['name']} (Prediction)",
-                'type': 'scatter',
-                'mode': 'lines',
-                'x': future_dates,
-                'y': future_values,
-                'line': {
-                    'color': trace.get('line', {}).get('color', '#999999'),
-                    'dash': future_color_suffix
+                "name": f"{trace['name']} (Prediction)",
+                "type": "scatter",
+                "mode": "lines",
+                "x": future_dates,
+                "y": future_values,
+                "line": {
+                    "color": trace.get("line", {}).get("color", "#999999"),
+                    "dash": future_color_suffix,
                 },
-                'opacity': 0.7,
-                'hovertemplate': '<b>%{meta}</b><br>Date: %{x}<br>Predicted Points: %{y:.0f}<extra></extra>',
-                'meta': trace['name']
+                "opacity": 0.7,
+                "hovertemplate": "<b>%{meta}</b><br>Date: %{x}<br>Predicted Points: %{y:.0f}<extra></extra>",
+                "meta": trace["name"],
             }
             traces.append(pred_trace)
     except Exception as e:
         print(f"Prediction generation error: {e}")
+
 
 def aggregate_time_period(trends_data, time_period):
     """Aggregate daily data into weekly, monthly, yearly, or fixed window periods (90/180 days).
@@ -2794,8 +3291,8 @@ def aggregate_time_period(trends_data, time_period):
     anchor_date = None
     try:
         for series in trends_data.values():
-            for d in series.get('dates', []) or []:
-                dt = datetime.strptime(d, '%Y-%m-%d')
+            for d in series.get("dates", []) or []:
+                dt = datetime.strptime(d, "%Y-%m-%d")
                 if anchor_date is None or dt < anchor_date:
                     anchor_date = dt
     except Exception:
@@ -2803,139 +3300,153 @@ def aggregate_time_period(trends_data, time_period):
 
     # Determine window size (in days) for custom fixed windows
     window_days = None
-    if time_period == '90_days':
+    if time_period == "90_days":
         window_days = 90
-    elif time_period == '180_days':
+    elif time_period == "180_days":
         window_days = 180
 
     for member_name, data in trends_data.items():
         aggregated_data[member_name] = {
-            'dates': [],
-            'points': [],
-            'daily_change': [],
-            'rank': [],
-            'open': [],
-            'high': [],
-            'low': [],
-            'close': []
+            "dates": [],
+            "points": [],
+            "daily_change": [],
+            "rank": [],
+            "open": [],
+            "high": [],
+            "low": [],
+            "close": [],
         }
-        
-        if not data['dates']:
+
+        if not data["dates"]:
             continue
-        
+
         # Group data by time period
         current_period = None
         period_data = []
-        
-        for i, date_str in enumerate(data['dates']):
-            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            
+
+        for i, date_str in enumerate(data["dates"]):
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+
             # Determine period based on time_period
             if window_days and anchor_date is not None:
                 # Fixed-length window (e.g., 90 or 180 days) anchored at earliest date
                 delta_days = (date_obj - anchor_date).days
                 bucket_index = delta_days // window_days
                 period_start = anchor_date + timedelta(days=bucket_index * window_days)
-                period_key = period_start.strftime('%Y-%m-%d')
-            elif time_period == 'weekly':
+                period_key = period_start.strftime("%Y-%m-%d")
+            elif time_period == "weekly":
                 # Get Monday of the week
-                period_key = (date_obj - timedelta(days=date_obj.weekday())).strftime('%Y-%m-%d')
-            elif time_period == 'monthly':
-                period_key = date_obj.strftime('%Y-%m-01')
-            elif time_period == 'yearly':
-                period_key = date_obj.strftime('%Y-01-01')
+                period_key = (date_obj - timedelta(days=date_obj.weekday())).strftime(
+                    "%Y-%m-%d"
+                )
+            elif time_period == "monthly":
+                period_key = date_obj.strftime("%Y-%m-01")
+            elif time_period == "yearly":
+                period_key = date_obj.strftime("%Y-01-01")
             else:
                 period_key = date_str
-            
+
             if current_period != period_key:
                 # Process previous period
                 if period_data:
-                    process_period_data(aggregated_data[member_name], current_period, period_data)
-                
+                    process_period_data(
+                        aggregated_data[member_name], current_period, period_data
+                    )
+
                 # Start new period
                 current_period = period_key
                 period_data = []
-            
+
             # Safe rank access
             rank_value = 0
-            if i < len(data.get('rank', [])):
+            if i < len(data.get("rank", [])):
                 try:
-                    rank_value = int(data['rank'][i]) if data['rank'][i] is not None else 0
+                    rank_value = (
+                        int(data["rank"][i]) if data["rank"][i] is not None else 0
+                    )
                 except Exception:
                     rank_value = 0
-            period_data.append({
-                'date': date_str,
-                'points': data['points'][i] if i < len(data['points']) else 0,
-                'daily_change': data['daily_change'][i] if i < len(data['daily_change']) else 0,
-                'rank': rank_value
-            })
-        
+            period_data.append(
+                {
+                    "date": date_str,
+                    "points": data["points"][i] if i < len(data["points"]) else 0,
+                    "daily_change": data["daily_change"][i]
+                    if i < len(data["daily_change"])
+                    else 0,
+                    "rank": rank_value,
+                }
+            )
+
         # Process last period
         if period_data:
-            process_period_data(aggregated_data[member_name], current_period, period_data)
-    
+            process_period_data(
+                aggregated_data[member_name], current_period, period_data
+            )
+
     return aggregated_data
+
 
 def process_period_data(member_data, period_date, period_data):
     """Process data for a specific time period"""
     if not period_data:
         return
-    
+
     # Calculate OHLC for candlestick charts
-    points_values = [d['points'] for d in period_data]
+    points_values = [d["points"] for d in period_data]
     open_val = points_values[0]
     close_val = points_values[-1]
     high_val = max(points_values)
     low_val = min(points_values)
-    
-    # Calculate total change for the period
-    total_change = sum(d['daily_change'] for d in period_data)
-    
-    # Use average rank for the period
-    avg_rank = sum(d['rank'] for d in period_data) / len(period_data) if period_data else 0
-    
-    member_data['dates'].append(period_date)
-    member_data['points'].append(close_val)
-    member_data['daily_change'].append(total_change)
-    member_data['rank'].append(int(avg_rank))
-    member_data['open'].append(open_val)
-    member_data['high'].append(high_val)
-    member_data['low'].append(low_val)
-    member_data['close'].append(close_val)
 
-def prepare_bar_data(trends_data, value_mode='cumulative'):
+    # Calculate total change for the period
+    total_change = sum(d["daily_change"] for d in period_data)
+
+    # Use average rank for the period
+    avg_rank = (
+        sum(d["rank"] for d in period_data) / len(period_data) if period_data else 0
+    )
+
+    member_data["dates"].append(period_date)
+    member_data["points"].append(close_val)
+    member_data["daily_change"].append(total_change)
+    member_data["rank"].append(int(avg_rank))
+    member_data["open"].append(open_val)
+    member_data["high"].append(high_val)
+    member_data["low"].append(low_val)
+    member_data["close"].append(close_val)
+
+
+def prepare_bar_data(trends_data, value_mode="cumulative"):
     """Prepare bar chart data.
     Cumulative mode: bar height = cumulative points value (monotonic, what users usually expect for totals).
     Interval mode: bar height = produced value (per-period production).
     (Previous behavior used positive deltas for cumulative; replaced for clarity.)"""
     chart_data = []
-    interval = value_mode == 'interval'
+    interval = value_mode == "interval"
     for member_name, data in trends_data.items():
-        if not data.get('dates'):
+        if not data.get("dates"):
             continue
         color = name_to_color(member_name)
-        if interval and 'produced' in data:
-            y_vals = data['produced']
-            label = 'Produced'
+        if interval and "produced" in data:
+            y_vals = data["produced"]
+            label = "Produced"
         else:  # cumulative
-            y_vals = data.get('points', [])
-            label = 'Points'
+            y_vals = data.get("points", [])
+            label = "Points"
         trace = {
-            'name': member_name,
-            'type': 'bar',
-            'x': data['dates'],
-            'y': y_vals,
-            'marker': {
-                'color': color,
-                'line': {'width': 0}
-            },
-            'opacity': 0.9,
-            'hovertemplate': f"<b>{member_name}</b><br>Date: %{{x}}<br>{label}: %{{y:,}}<extra></extra>"
+            "name": member_name,
+            "type": "bar",
+            "x": data["dates"],
+            "y": y_vals,
+            "marker": {"color": color, "line": {"width": 0}},
+            "opacity": 0.9,
+            "hovertemplate": f"<b>{member_name}</b><br>Date: %{{x}}<br>{label}: %{{y:,}}<extra></extra>",
         }
         chart_data.append(trace)
     return chart_data
 
-def prepare_candlestick_data(trends_data, value_mode='cumulative', time_period='daily'):
+
+def prepare_candlestick_data(trends_data, value_mode="cumulative", time_period="daily"):
     """Prepare candlestick traces.
     Interval mode (production comparison between periods):
       - open  = previous period's produced amount (0 for first)
@@ -2947,20 +3458,20 @@ def prepare_candlestick_data(trends_data, value_mode='cumulative', time_period='
       - Uses stored OHLC if available or falls back to points list for all fields (traditional cumulative level candle).
     (Historical note: earlier version attempted baseline cumulative points; simplified now to production vs previous production.)"""
     chart_data = []
-    interval = (value_mode == 'interval')
+    interval = value_mode == "interval"
     for member_name, data in trends_data.items():
-        dates = data.get('dates')
+        dates = data.get("dates")
         if not dates:
             continue
-        points_list = data.get('points', [])  # cumulative closes
-        produced_list = data.get('produced') if interval else None
+        points_list = data.get("points", [])  # cumulative closes
+        produced_list = data.get("produced") if interval else None
         open_vals = []
         high_vals = []
         low_vals = []
         close_vals = []
         if interval and produced_list is not None:
             for i, prod in enumerate(produced_list):
-                prev_prod = produced_list[i-1] if i > 0 else 0
+                prev_prod = produced_list[i - 1] if i > 0 else 0
                 o = prev_prod
                 c = prod
                 open_vals.append(o)
@@ -2972,56 +3483,61 @@ def prepare_candlestick_data(trends_data, value_mode='cumulative', time_period='
                 produced = c
                 change = c - o
                 if o <= 0:
-                    pct_str = '—' if produced > 0 else '0.0%'
+                    pct_str = "—" if produced > 0 else "0.0%"
                 else:
                     pct_val = (change / o) * 100.0
                     pct_str = f"{pct_val:.1f}%"
                 customdata.append([produced, change, pct_str])
             hover_template = (
-                '<b>%{meta}</b><br>'
-                'Period: %{x}<br>'
-                'Produced: %{customdata[0]:,}<br>'
-                'Δ: %{customdata[1]:,} (%{customdata[2]})'
-                '<extra></extra>'
+                "<b>%{meta}</b><br>"
+                "Period: %{x}<br>"
+                "Produced: %{customdata[0]:,}<br>"
+                "Δ: %{customdata[1]:,} (%{customdata[2]})"
+                "<extra></extra>"
             )
         else:
-            o = data.get('open') or points_list
-            h = data.get('high') or points_list
-            l = data.get('low') or points_list
-            c = data.get('close') or points_list
+            o = data.get("open") or points_list
+            h = data.get("high") or points_list
+            l = data.get("low") or points_list
+            c = data.get("close") or points_list
             open_vals = o
             high_vals = h
             low_vals = l
             close_vals = c
-            hover_template = '<b>%{meta}</b><br>Period: %{x}<br>O: %{open:,}<br>H: %{high:,}<br>L: %{low:,}<br>C: %{close:,}<extra></extra>'
+            hover_template = "<b>%{meta}</b><br>Period: %{x}<br>O: %{open:,}<br>H: %{high:,}<br>L: %{low:,}<br>C: %{close:,}<extra></extra>"
         base_color = name_to_color(member_name)
-        inc_color = blend_with(base_color, (34,197,94), 0.55)   # blend with emerald-500
-        dec_color = blend_with(base_color, (248,113,113), 0.55) # blend with red-400
+        inc_color = blend_with(
+            base_color, (34, 197, 94), 0.55
+        )  # blend with emerald-500
+        dec_color = blend_with(base_color, (248, 113, 113), 0.55)  # blend with red-400
         trace = {
-            'name': member_name,
-            'type': 'candlestick',
-            'x': dates,
-            'open': open_vals,
-            'high': high_vals,
-            'low': low_vals,
-            'close': close_vals,
-            'increasing': {'line': {'color': inc_color}},
-            'decreasing': {'line': {'color': dec_color}},
-            'whiskerwidth': 0.5,
+            "name": member_name,
+            "type": "candlestick",
+            "x": dates,
+            "open": open_vals,
+            "high": high_vals,
+            "low": low_vals,
+            "close": close_vals,
+            "increasing": {"line": {"color": inc_color}},
+            "decreasing": {"line": {"color": dec_color}},
+            "whiskerwidth": 0.5,
             # Use hovertemplate (not hoverinfo) so custom production stats show; hoverinfo here was suppressing template
-            'hovertemplate': hover_template,
-            'meta': member_name
+            "hovertemplate": hover_template,
+            "meta": member_name,
         }
         if interval and produced_list:
-            trace['customdata'] = customdata
+            trace["customdata"] = customdata
             # Suppress default candlestick hover (which can still show OHLC in some modes)
-            trace['hoverinfo'] = 'skip'
+            trace["hoverinfo"] = "skip"
             # Compute approximate width based on smallest x-spacing (date axis -> milliseconds)
             width_ms = None
             if len(dates) > 1:
                 try:
-                    parsed = [datetime.strptime(d, '%Y-%m-%d') for d in dates]
-                    gaps = [(parsed[i+1]-parsed[i]).total_seconds()*1000 for i in range(len(parsed)-1)]  # ms
+                    parsed = [datetime.strptime(d, "%Y-%m-%d") for d in dates]
+                    gaps = [
+                        (parsed[i + 1] - parsed[i]).total_seconds() * 1000
+                        for i in range(len(parsed) - 1)
+                    ]  # ms
                     if gaps:
                         # Candlestick body tends to be narrower than full category; use 60% of min gap
                         width_ms = min(gaps) * 0.6
@@ -3033,7 +3549,9 @@ def prepare_candlestick_data(trends_data, value_mode='cumulative', time_period='
             overall_range = overall_high - overall_low
             if overall_range <= 0:
                 overall_range = 1  # prevent division by zero
-            min_span = max(overall_range * 0.01, 0.5)  # at least 0.5 (points) or 0.1% of range
+            min_span = max(
+                overall_range * 0.01, 0.5
+            )  # at least 0.5 (points) or 0.1% of range
             expanded_base = []
             expanded_height = []
             for h, l in zip(high_vals, low_vals):
@@ -3055,67 +3573,71 @@ def prepare_candlestick_data(trends_data, value_mode='cumulative', time_period='
                     expanded_height.append(span + extra)
             # Add transparent bar overlay spanning (slightly bigger than) candle to capture hover anywhere
             overlay_bar = {
-                'name': member_name,
-                'type': 'bar',
-                'x': dates,
-                'y': expanded_height,
-                'base': expanded_base,
-                'marker': {
-                    'color': 'rgba(0,0,0,0)',
-                    'line': {'width': 0}
-                },
-                'opacity': 0.01,  # nearly invisible but area still interactive
-                'customdata': customdata,
-                'hovertemplate': (
-                    '<b>%{meta}</b><br>'
-                    'Period: %{x}<br>'
-                    'Produced: %{customdata[0]:,}<br>'
-                    'Δ: %{customdata[1]:,} (%{customdata[2]})'
-                    '<extra></extra>'
+                "name": member_name,
+                "type": "bar",
+                "x": dates,
+                "y": expanded_height,
+                "base": expanded_base,
+                "marker": {"color": "rgba(0,0,0,0)", "line": {"width": 0}},
+                "opacity": 0.01,  # nearly invisible but area still interactive
+                "customdata": customdata,
+                "hovertemplate": (
+                    "<b>%{meta}</b><br>"
+                    "Period: %{x}<br>"
+                    "Produced: %{customdata[0]:,}<br>"
+                    "Δ: %{customdata[1]:,} (%{customdata[2]})"
+                    "<extra></extra>"
                 ),
-                'meta': member_name,
-                'showlegend': False,
-                'hoverlabel': {'namelength': -1},
-                'offsetgroup': f"ovl_{member_name}",
-                'legendgroup': f"ovl_{member_name}",
-                'width': width_ms  # match approximate candle body width
+                "meta": member_name,
+                "showlegend": False,
+                "hoverlabel": {"namelength": -1},
+                "offsetgroup": f"ovl_{member_name}",
+                "legendgroup": f"ovl_{member_name}",
+                "width": width_ms,  # match approximate candle body width
             }
             chart_data.append(overlay_bar)
         chart_data.append(trace)
     return chart_data
 
-def prepare_line_data(trends_data, value_mode='cumulative', fill_enabled=True):
+
+def prepare_line_data(trends_data, value_mode="cumulative", fill_enabled=True):
     """Prepare data for line charts.
     value_mode: 'cumulative' (points) or 'interval' (produced).
     fill_enabled: when True apply area fill under lines; when False lines only."""
     chart_data = []
-    label = 'Produced' if value_mode == 'interval' else 'Points'
+    label = "Produced" if value_mode == "interval" else "Points"
     for member_name, data in trends_data.items():
-        if not data.get('dates'):
+        if not data.get("dates"):
             continue
         color = name_to_color(member_name)
-        if value_mode == 'interval' and 'produced' in data:
-            y_vals = data['produced']
+        if value_mode == "interval" and "produced" in data:
+            y_vals = data["produced"]
         else:
-            y_vals = data.get('points', [])
+            y_vals = data.get("points", [])
         trace_data = {
-            'name': member_name,
-            'type': 'scatter',
-            'mode': 'lines+markers',
-            'x': data['dates'],
-            'y': y_vals,
-            'line': {'color': color, 'width': 2.4, 'shape': 'spline', 'smoothing': 0.65},
-            'marker': {'size': 5, 'color': color, 'line': {'width': 0}},
-            'hovertemplate': f"<b>{member_name}</b><br>Date: %{{x}}<br>{label}: %{{y:,}}<extra></extra>"
+            "name": member_name,
+            "type": "scatter",
+            "mode": "lines+markers",
+            "x": data["dates"],
+            "y": y_vals,
+            "line": {
+                "color": color,
+                "width": 2.4,
+                "shape": "spline",
+                "smoothing": 0.65,
+            },
+            "marker": {"size": 5, "color": color, "line": {"width": 0}},
+            "hovertemplate": f"<b>{member_name}</b><br>Date: %{{x}}<br>{label}: %{{y:,}}<extra></extra>",
         }
         if fill_enabled:
             # Apply area fill for every series in both modes
-            alpha_suffix = '30'  # ~19% opacity
+            alpha_suffix = "30"  # ~19% opacity
             fillcolor = color + alpha_suffix if len(color) == 7 else color
-            trace_data['fill'] = 'tozeroy'
-            trace_data['fillcolor'] = fillcolor
+            trace_data["fill"] = "tozeroy"
+            trace_data["fillcolor"] = fillcolor
         chart_data.append(trace_data)
     return chart_data
+
 
 def fill_missing_daily_dates(trends_data):
     """Forward-fill missing dates across series so lines are continuous.
@@ -3124,35 +3646,37 @@ def fill_missing_daily_dates(trends_data):
         # Gather all dates
         all_dates = set()
         for series in trends_data.values():
-            for d in series.get('dates', []):
+            for d in series.get("dates", []):
                 all_dates.add(d)
         if not all_dates:
             return trends_data
-        start_dt = min(datetime.strptime(d, '%Y-%m-%d') for d in all_dates)
-        end_dt = max(datetime.strptime(d, '%Y-%m-%d') for d in all_dates)
+        start_dt = min(datetime.strptime(d, "%Y-%m-%d") for d in all_dates)
+        end_dt = max(datetime.strptime(d, "%Y-%m-%d") for d in all_dates)
         # Build full date list
         full_dates = []
         cur = start_dt
         while cur <= end_dt:
-            full_dates.append(cur.strftime('%Y-%m-%d'))
+            full_dates.append(cur.strftime("%Y-%m-%d"))
             cur += timedelta(days=1)
         for name, series in trends_data.items():
-            if not series.get('dates'):  # skip empty
+            if not series.get("dates"):  # skip empty
                 continue
-            existing_idx = {d: i for i, d in enumerate(series['dates'])}
+            existing_idx = {d: i for i, d in enumerate(series["dates"])}
             new_dates = []
             new_points = []
             new_changes = []
             new_rank = []
-            has_rank = bool(series.get('rank')) and len(series['rank']) == len(series['dates'])
+            has_rank = bool(series.get("rank")) and len(series["rank"]) == len(
+                series["dates"]
+            )
             last_points = None
             last_rank = None
             for d in full_dates:
                 if d in existing_idx:
                     idx = existing_idx[d]
-                    val = series['points'][idx]
-                    chg = series['daily_change'][idx]
-                    rk = series['rank'][idx] if has_rank else None
+                    val = series["points"][idx]
+                    chg = series["daily_change"][idx]
+                    rk = series["rank"][idx] if has_rank else None
                     last_points = val
                     last_rank = rk
                 else:
@@ -3168,22 +3692,23 @@ def fill_missing_daily_dates(trends_data):
                 if has_rank:
                     new_rank.append(rk if rk is not None else 0)
             # Replace if extended
-            if len(new_dates) > len(series['dates']):
-                series['dates'] = new_dates
-                series['points'] = new_points
-                series['daily_change'] = new_changes
+            if len(new_dates) > len(series["dates"]):
+                series["dates"] = new_dates
+                series["points"] = new_points
+                series["daily_change"] = new_changes
                 if has_rank:
-                    series['rank'] = new_rank
+                    series["rank"] = new_rank
         return trends_data
     except Exception as e:
         print(f"fill_missing_daily_dates error: {e}")
         return trends_data
 
+
 # Flask startup
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))  # Render provides PORT env var
-    debug_mode = os.environ.get('FLASK_ENV') == 'development'
-    
+    port = int(os.environ.get("PORT", 5000))  # Render provides PORT env var
+    debug_mode = os.environ.get("FLASK_ENV") == "development"
+
     print("Starting IBU Dashboard...")
     print(f"Access the dashboard at: http://localhost:{port}")
-    app.run(debug=debug_mode, host='0.0.0.0', port=port)
+    app.run(debug=debug_mode, host="0.0.0.0", port=port)

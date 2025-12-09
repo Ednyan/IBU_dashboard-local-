@@ -97,6 +97,7 @@ def decode_mime(s: str) -> str:
 
 def extract_text(msg: email.message.Message) -> str:
     """Extract readable text from an email message. Prefer text/plain; fallback to stripped HTML."""
+
     def strip_html(html_src: str) -> str:
         # Remove head, script, and style blocks entirely
         text = re.sub(r"(?is)<(head|script|style)[^>]*>.*?</\1>", "", html_src)
@@ -227,7 +228,9 @@ def _hyperlink_username(body: str) -> str:
     if not body:
         return body
     # Pattern: 'User' + optional space/punct + optional quotes/brackets + username token
-    pattern = re.compile(r"(?i)\bUser\b\s*[:\-–—]?\s*[\"'\(\[]?([A-Za-z0-9_.\-]+)[\"'\)\]]?", re.UNICODE)
+    pattern = re.compile(
+        r"(?i)\bUser\b\s*[:\-–—]?\s*[\"'\(\[]?([A-Za-z0-9_.\-]+)[\"'\)\]]?", re.UNICODE
+    )
 
     def repl(m: re.Match) -> str:
         uname = m.group(1)
@@ -248,7 +251,7 @@ def _truncate_body(body: str) -> str:
     cut_positions = []
     # Stop after first white smiling face emoji (U+263A)
     try:
-        idx = body.index('☺')
+        idx = body.index("☺")
         cut_positions.append(idx + 1)
     except ValueError:
         pass
@@ -262,7 +265,9 @@ def _truncate_body(body: str) -> str:
     return body[:cut_at].rstrip()
 
 
-def send_to_discord(webhook_url: str, subject: str, sender: str, date_str: str, body: str):
+def send_to_discord(
+    webhook_url: str, subject: str, sender: str, date_str: str, body: str
+):
     header = f"**From:** {sender}\n**Subject:** {subject}\n**Date:** {date_str}\n"
     # Prepare body: hyperlink usernames and truncate at desired marker(s)
     body = _hyperlink_username(body)
@@ -298,14 +303,20 @@ def send_to_discord(webhook_url: str, subject: str, sender: str, date_str: str, 
         if wb_avatar:
             payload["avatar_url"] = wb_avatar
         if debug:
-            print(f"[Email→Discord] Posting chunk {i}/{len(body_chunks)} (desc_len={len(ch)}) banner={'yes' if (i==1 and banner_enabled and banner_url) else 'no'} color={'set' if embed_color is not None else 'none'}")
+            print(
+                f"[Email→Discord] Posting chunk {i}/{len(body_chunks)} (desc_len={len(ch)}) banner={'yes' if (i == 1 and banner_enabled and banner_url) else 'no'} color={'set' if embed_color is not None else 'none'}"
+            )
         resp = requests.post(webhook_url, json=payload)
         # Basic 429 handling
         if resp.status_code == 429:
             try:
                 retry = float(resp.json().get("retry_after", 1.0))
             except Exception:
-                retry = float(resp.headers.get("Retry-After", 1)) if resp.headers.get("Retry-After") else 1.0
+                retry = (
+                    float(resp.headers.get("Retry-After", 1))
+                    if resp.headers.get("Retry-After")
+                    else 1.0
+                )
             time.sleep(retry)
             if debug:
                 print(f"[Email→Discord] Retrying after 429 in {retry}s")
@@ -345,11 +356,17 @@ def fetch_and_forward():
     debug = os.getenv("EMAIL_TO_DISCORD_DEBUG", "false").lower() == "true"
 
     # Filters (comma-separated)
-    from_whitelist = [x.strip() for x in os.getenv("FILTER_FROM", "").split(",") if x.strip()]
-    subj_keywords = [x.strip() for x in os.getenv("FILTER_SUBJECT", "").split(",") if x.strip()]
+    from_whitelist = [
+        x.strip() for x in os.getenv("FILTER_FROM", "").split(",") if x.strip()
+    ]
+    subj_keywords = [
+        x.strip() for x in os.getenv("FILTER_SUBJECT", "").split(",") if x.strip()
+    ]
 
     if not (imap_host and imap_user and imap_pass and discord_webhook):
-        raise RuntimeError("Missing IMAP_* or DISCORD_WEBHOOK_URL environment variables")
+        raise RuntimeError(
+            "Missing IMAP_* or DISCORD_WEBHOOK_URL environment variables"
+        )
 
     # Acquire a cross-process lock to avoid duplicate runs from multiple schedulers/processes
     stale_secs = int(os.getenv("EMAIL_TO_DISCORD_LOCK_STALE_SECONDS", "600"))
@@ -369,20 +386,22 @@ def fetch_and_forward():
         M.login(imap_user, imap_pass)
         M.select(imap_folder)
         # Fetch UNSEEN newer than last UID; if last_uid=0, fetch all UNSEEN
-        typ, data = M.uid('search', None, '(UNSEEN)')
-        if typ != 'OK':
+        typ, data = M.uid("search", None, "(UNSEEN)")
+        if typ != "OK":
             raise RuntimeError("IMAP search failed")
 
         uids = [int(x) for x in (data[0].split() if data and data[0] else [])]
         uids = [u for u in uids if u > last_uid]
         uids.sort()
         if debug:
-            print(f"[Email→Discord] Found {len(uids)} UNSEEN uids newer than {last_uid}: {uids[:10]}{'...' if len(uids)>10 else ''}")
+            print(
+                f"[Email→Discord] Found {len(uids)} UNSEEN uids newer than {last_uid}: {uids[:10]}{'...' if len(uids) > 10 else ''}"
+            )
 
         for uid in uids:
             # Use BODY.PEEK[] to avoid setting \Seen when fetching the message
-            typ, msg_data = M.uid('fetch', str(uid), '(BODY.PEEK[])')
-            if typ != 'OK' or not msg_data or not msg_data[0]:
+            typ, msg_data = M.uid("fetch", str(uid), "(BODY.PEEK[])")
+            if typ != "OK" or not msg_data or not msg_data[0]:
                 last_uid = max(last_uid, uid)
                 continue
             raw = msg_data[0][1]
@@ -399,18 +418,22 @@ def fetch_and_forward():
 
             if not match_filters(frm, subj, from_whitelist, subj_keywords):
                 if debug:
-                    print(f"[Email→Discord] Skipping UID {uid} (filters not matched). From='{frm}', Subject='{subj}'")
+                    print(
+                        f"[Email→Discord] Skipping UID {uid} (filters not matched). From='{frm}', Subject='{subj}'"
+                    )
                 last_uid = max(last_uid, uid)
                 continue
 
             body = extract_text(msg).strip()
             if debug:
-                print(f"[Email→Discord] Forwarding UID {uid}: From='{frm}', Subject='{subj}', body_len={len(body)}")
+                print(
+                    f"[Email→Discord] Forwarding UID {uid}: From='{frm}', Subject='{subj}', body_len={len(body)}"
+                )
             try:
                 send_to_discord(discord_webhook, subj, frm, date_str, body)
                 # Mark as seen only after successful Discord post
                 try:
-                    M.uid('store', str(uid), '+FLAGS', '(\\Seen)')
+                    M.uid("store", str(uid), "+FLAGS", "(\\Seen)")
                 except Exception as me:
                     if debug:
                         print(f"[Email→Discord] Failed to mark UID {uid} as Seen: {me}")
