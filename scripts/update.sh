@@ -3,6 +3,14 @@
 # Update repo
 git pull origin main
 # Update python modules
-./.venv/bin/python -m pip install --upgrade -r requirements.txt
+
+# Python setup
+if [[ "$1" == "uv" ]]; then
+    uv pip install -r requirements.txt --upgrade --python .venv/bin/python
+else
+    ./.venv/bin/python -m pip install --upgrade -r requirements.txt
+fi
+
+
 # Rebuild custom rust modules
 ./scripts/build.sh
