@@ -9,7 +9,7 @@ RUN ./scripts/setup.sh uv
 RUN cargo clean
 
 RUN mkdir -p /var/spool/cron
-RUN echo "0 19 * * * cd /ibu && mkdir -p /ibu/logs && /ibu/.venv/bin/python sheepit_scraper.py >> /ibu/logs/cron.log 2>&1" > /var/spool/cron/root
+RUN echo "0 19 * * * cd /ibu && mkdir -p /ibu/logs && /ibu/.venv/bin/python /ibu/ibu_dashboard/sheepit_scraper.py >> /ibu/logs/cron.log 2>&1" > /var/spool/cron/root
 EXPOSE 5000
 
 ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
