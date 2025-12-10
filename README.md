@@ -18,6 +18,6 @@ This is a project made by members of the [I.B.U Sheepit team](https://sheepit-re
 
 - Clone this repo.
 - Run `./scripts/setup.sh` To make a virtual python environment, build rust libraries, and install python dependencies.
-- Run `./scripts/run-dev.sh` to run. You can also run manually with `./.venv/bin/python IBU_dashboard.py`
+- Run `./scripts/run-dev.sh` to run. You can also run manually with `./.venv/bin/python main.py`
 
 If you want to run a production version refer to the [Production Setup Guide](docs/prod-setup.md)

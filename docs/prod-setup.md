@@ -12,9 +12,9 @@
 
 - Clone this repo.
 - Run `./scripts/setup.sh` to do initial setup.
-- To get the webserver running, run `./scripts/run.sh` This will expose a server on 172.0.0.1:5000.
+- To get the webserver running, run `./scripts/run.sh` This will expose a server on 0.0.0.0:5000.
 - Create an `.env` file to configure the app. You can use the provided `.env.example` file as a reference.
-- To scrape team data you can run `sheepit_scraper.py`, or use a cron job.
+- To scrape team data you can run `./ibu_dashboard/sheepit_scraper.py`, or use a cron job.
 
 # Docker Production Setup.
 
