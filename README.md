@@ -1,8 +1,10 @@
-# IBU Dashboard
+# I.B.U. Dashboard
+
+Intelligent Beings United
 
 ## What is it?
 
-This is a project made by members of the [I.B.U Sheepit team](https://sheepit-renderfarm.com/team/2109), designed to track user contribution to the team. You can see the production deployment [here](https://ibu.koolkid6958.dev).
+This is a project made by members of the [I.B.U. Sheepit team](https://sheepit-renderfarm.com/team/2109), designed to track user contribution to the team. You can see the production deployment [here](https://ibu.koolkid6958.dev).
 
 ## Dev Quickstart
 
