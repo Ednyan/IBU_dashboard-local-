@@ -35,7 +35,7 @@ load_dotenv()
 
 # Import notification service
 try:
-    from notification_service import notification_service
+    from ibu_dashboard.notification_service import notification_service
 
     NOTIFICATIONS_ENABLED = True
     print("✅ Email notifications enabled")
@@ -695,7 +695,9 @@ ADMIN_PASSWORD = os.getenv(
 # --- Background Scheduler: Email -> Discord Forwarder ------------------------
 # Import the worker function from the standalone script
 try:
-    from email_to_discord import fetch_and_forward as _email_to_discord_run_once
+    from ibu_dashboard.email_to_discord import (
+        fetch_and_forward as _email_to_discord_run_once,
+    )
 
     _EMAIL_TO_DISCORD_AVAILABLE = True
 except Exception as _e:
