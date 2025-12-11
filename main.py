@@ -1528,11 +1528,11 @@ def get_member_probation_status():
                 if week_1_passed and month_1_passed and month_3_passed:
                     probation_status = "passed"
                 # Check if they failed any milestone (only if deadline has passed AND they failed)
-                elif not current_date >= month_3_date and month_3_passed:
+                elif current_date >= month_3_date and not month_3_passed:
                     probation_status = "failed"
-                elif not current_date >= month_1_date and month_1_passed:
+                elif current_date >= month_1_date and not month_1_passed:
                     probation_status = "failed"
-                elif not current_date >= week_1_date and week_1_passed:
+                elif current_date >= week_1_date and not week_1_passed:
                     probation_status = "failed"
 
                 # Post-probation compliance tracking (only for members who passed probation)
